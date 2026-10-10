@@ -40,5 +40,7 @@ training:
   probe_steps: 50          # throughput probe length (timed on its second epoch)
   steps_per_epoch: 1000    # not in PLAN: checkpoint / held-out evaluation interval
   mixed_precision: mixed_float16
+  steps_per_execution: 32  # throughput only: host syncs once per 32 steps
+  workers: 4               # batch-prefetch threads
 eval:
   held_out: [wikitext_validation, dialogsum_validation]

@@ -110,7 +110,9 @@ def train_seed(
     spe, epochs, total_steps = steps_for(
         len(train_arrays), tr["batch_size"], tr["epochs"], tr["max_steps"], tr["steps_per_epoch"]
     )
-    train_ds = CleanupDataset(train_arrays, tr["batch_size"], weights, seed=seed, max_batches=spe)
+    train_ds = CleanupDataset(
+        train_arrays, tr["batch_size"], weights, seed=seed, max_batches=spe, workers=tr["workers"]
+    )
     val_ds = CleanupDataset(val_arrays, tr["batch_size"], weights, shuffle=False, drop_last=False)
 
     model = build_cleanup_model(cfg["model"])
@@ -118,6 +120,7 @@ def train_seed(
         optimizer=build_optimizer(cfg["optimizer"], total_steps),
         loss={"casing": masked_sparse_ce(), "punct": masked_sparse_ce()},
         loss_weights={"casing": cfg["loss"]["casing_weight"], "punct": cfg["loss"]["punct_weight"]},
+        steps_per_execution=tr["steps_per_execution"],
     )
     log.info(
         "seed %d: %d params, %d steps/epoch x %d epochs", seed, model.count_params(), spe, epochs

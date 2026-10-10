@@ -95,18 +95,17 @@ class TimeGuard(keras.callbacks.Callback):
 
     Pass the same ``session_start`` to every run of a session (several seeds in one Kaggle
     session share one budget). At each epoch end, stops if another epoch (estimated as 1.2 x
-    the longest so far) would overrun. Also stops mid-epoch if the hard limit is reached.
+    the longest so far) would overrun. Also stops mid-epoch if the hard limit is reached
+    (checked on every batch-end call: with ``steps_per_execution`` > 1 Keras calls it once per
+    execution, with ``batch`` = the last step of that execution).
     ``stopped`` tells the caller whether training was cut short (so it can skip the final
     evaluation and resume later).
     """
 
-    def __init__(
-        self, max_hours: float, session_start: float | None = None, check_every: int = 50
-    ) -> None:
+    def __init__(self, max_hours: float, session_start: float | None = None) -> None:
         super().__init__()
         self.limit = max_hours * 3600.0
         self.session_start = session_start
-        self.check_every = check_every
         self.stopped = False
         self._start = 0.0
         self._epoch_start = 0.0
@@ -119,7 +118,7 @@ class TimeGuard(keras.callbacks.Callback):
         self._epoch_start = time.time()
 
     def on_train_batch_end(self, batch, logs=None) -> None:
-        if batch % self.check_every == 0 and time.time() - self._start > self.limit:
+        if time.time() - self._start > self.limit:
             log.warning("TimeGuard: hard limit reached mid-epoch, stopping.")
             self.stopped = self.model.stop_training = True
 

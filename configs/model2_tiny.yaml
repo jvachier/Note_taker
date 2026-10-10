@@ -23,6 +23,8 @@ optimizer:
 training:
   batch_size: 8
   epochs: 5
+  steps_per_execution: 2
+  workers: 2
   max_steps: 50
   steps_per_epoch: 10
   mixed_precision: float32

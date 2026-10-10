@@ -139,3 +139,12 @@ def test_configure_devices_rejects_uneven_batches(monkeypatch):
     with pytest.raises(ValueError, match="not divisible"):
         configure_devices("float32", 128, 77)
     keras.mixed_precision.set_dtype_policy("float32")
+
+
+def test_time_guard_hard_limit_fires_on_any_batch_index():
+    # With steps_per_execution=32 Keras reports batches 31, 63, ... (never a multiple of 50).
+    guard = TimeGuard(max_hours=1.0, session_start=time.time() - 3700)
+    guard.set_model(_Model())
+    guard.on_train_begin()
+    guard.on_train_batch_end(31)
+    assert guard.stopped and guard.model.stop_training

@@ -42,10 +42,12 @@ optimizer:
   weight_decay: 0.01
 training:
   batch_size: 128
-  epochs: 20               # not in PLAN: upper bound, early stopping decides
+  epochs: 8                # not in PLAN: cosine decays to 0 over 8 epochs; early stopping may cut it
   max_steps: null
   steps_per_epoch: null     # null = one full pass over train
   mixed_precision: mixed_float16
+  steps_per_execution: 32  # throughput only: host syncs once per 32 steps
+  workers: 4               # batch-prefetch threads
   early_stopping:
     monitor: val_punct_macro_f1
     mode: max

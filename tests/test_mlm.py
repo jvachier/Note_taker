@@ -207,7 +207,7 @@ def test_interrupted_run_resumes_with_optimizer_state(tmp_path, configs_dir, tin
     cfg = _config(tmp_path, configs_dir, tiny_assets, max_steps=6, steps_per_epoch=3)
     mlm_data.main(["--config", str(cfg)])
     text = cfg.read_text()
-    cfg.write_text(text + "max_hours: 0\n")  # time guard stops after the first batch
+    cfg.write_text(text + "max_hours: 0\n")  # time guard stops after the first execution
     mlm_train.main(["--config", str(cfg)])
     results = tmp_path / "results" / "mlm_test"
     assert json.loads((results / "manifest.json").read_text())["status"] == "interrupted"
@@ -219,4 +219,7 @@ def test_interrupted_run_resumes_with_optimizer_state(tmp_path, configs_dir, tin
     manifest = json.loads((results / "manifest.json").read_text())
     assert manifest["status"] == "complete" and manifest["epochs_this_session"] == 1
     model = keras.saving.load_model(ckpt / "mlm.keras")
-    assert int(model.optimizer.iterations) == 1 + 3  # 1 step before the cut, 3 after resuming
+    from src.config import load_config
+
+    cut = load_config(cfg)["training"]["steps_per_execution"]  # steps run before the cut
+    assert int(model.optimizer.iterations) == cut + 3  # 3 more steps after resuming

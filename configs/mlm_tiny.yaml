@@ -22,3 +22,5 @@ training:
   max_steps: 50
   steps_per_epoch: 10
   mixed_precision: float32
+  steps_per_execution: 2
+  workers: 2

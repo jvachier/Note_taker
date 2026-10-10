@@ -180,11 +180,14 @@ def load_set(processed_dir: Path, name: str) -> tuple[np.ndarray, np.ndarray]:
     )
 
 
-def compile_model(model: keras.Model, optimizer: keras.optimizers.Optimizer) -> None:
+def compile_model(
+    model: keras.Model, optimizer: keras.optimizers.Optimizer, steps_per_execution: int = 1
+) -> None:
     model.compile(
         optimizer=optimizer,
         loss=masked_sparse_ce(),
         weighted_metrics=[keras.metrics.SparseCategoricalAccuracy(name="acc")],
+        steps_per_execution=steps_per_execution,
     )
 
 
@@ -204,7 +207,8 @@ def measure_throughput(cfg: dict[str, Any], train: MLMDataset) -> float:
     """Training steps per second, timed on a second epoch of ``probe_steps`` (after compile)."""
     probe = cfg["training"]["probe_steps"]
     model = build_mlm_model(cfg["model"])
-    compile_model(model, keras.optimizers.AdamW(learning_rate=1e-5))
+    tr = cfg["training"]
+    compile_model(model, keras.optimizers.AdamW(learning_rate=1e-5), tr["steps_per_execution"])
     ds = MLMDataset(
         train.token_ids,
         train.speaker_ids,
@@ -213,6 +217,7 @@ def measure_throughput(cfg: dict[str, Any], train: MLMDataset) -> float:
         train.vocab_size,
         seed=train.seed,
         steps_per_epoch=probe,
+        workers=tr["workers"],
     )
     timer = _EpochTimer()
     model.fit(ds, epochs=2, callbacks=[timer], verbose=0)
@@ -284,6 +289,7 @@ def train(cfg: dict[str, Any], seed: int) -> dict[str, Any]:
         vocab,
         seed=seed,
         steps_per_epoch=tr["steps_per_epoch"],
+        workers=tr["workers"],
     )
     out.mkdir(parents=True, exist_ok=True)
     results.mkdir(parents=True, exist_ok=True)
@@ -306,7 +312,7 @@ def train(cfg: dict[str, Any], seed: int) -> dict[str, Any]:
 
     set_seed(seed)  # the probe consumed random state
     model = build_mlm_model(cfg["model"])
-    compile_model(model, build_optimizer(cfg["optimizer"], total_steps))
+    compile_model(model, build_optimizer(cfg["optimizer"], total_steps), tr["steps_per_execution"])
     log.info("%d params, %d steps/epoch x %d epochs", model.count_params(), steps_per_epoch, epochs)
     guard = TimeGuard(cfg["max_hours"])
     callbacks = [

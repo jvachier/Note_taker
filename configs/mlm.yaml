@@ -1,0 +1,38 @@
+name: model1_mlm
+description: MLM pretraining of the Model 1 encoder on WikiText-103 + DialogSum train.
+seeds: [0]                 # not in PLAN: single pretraining run (compute budget)
+max_hours: 10
+paths:
+  tokenizer_dir: data/tokenizer
+  processed_dir: data/processed/mlm
+  output_dir: checkpoints/mlm
+data:
+  seq_len: 512
+  corpus: [wikitext_train, dialogsum_train]
+  mask_prob: 0.15
+  mask_token_frac: 0.8
+  random_token_frac: 0.1
+  keep_frac: 0.1
+model:
+  vocab_size: 16000
+  d_model: 384
+  num_layers: 6
+  num_heads: 6
+  ffn_dim: 1536
+  max_len: 512
+  num_speakers: 8
+  dropout: 0.1
+  init_std: 0.02
+  tie_embeddings: true
+optimizer:
+  name: adamw
+  peak_lr: 5.0e-4
+  warmup_steps: 4000
+  schedule: cosine
+  weight_decay: 0.01       # not in PLAN for MLM: same as Model 2
+training:
+  batch_size: 64
+  max_steps: null          # set after measuring throughput (target 8-10 GPU-hours)
+  mixed_precision: mixed_float16
+eval:
+  held_out: [wikitext_validation, dialogsum_validation]

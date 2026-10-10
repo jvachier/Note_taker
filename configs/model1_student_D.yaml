@@ -1,0 +1,7 @@
+base: model1_student_A.yaml
+name: model1_student_D_noMLM
+description: Ablation - does MLM pretraining help? Student A with random initialisation.
+paths:
+  init_checkpoint: null
+  output_dir: checkpoints/model1_student_D
+init: random

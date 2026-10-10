@@ -1,0 +1,21 @@
+base: mlm.yaml
+name: model1_mlm_tiny
+description: CPU smoke test for MLM pretraining (must finish in < 2 minutes).
+max_hours: 0.03
+paths:
+  processed_dir: data/processed/mlm_tiny
+  output_dir: checkpoints/mlm_tiny
+data:
+  seq_len: 64
+model:
+  d_model: 32
+  num_layers: 1
+  num_heads: 2
+  ffn_dim: 64
+  max_len: 64
+optimizer:
+  warmup_steps: 5
+training:
+  batch_size: 4
+  max_steps: 50
+  mixed_precision: float32

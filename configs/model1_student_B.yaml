@@ -1,0 +1,8 @@
+base: model1_student_A.yaml
+name: model1_student_B
+description: Student B, distilled from the Qwen2.5-1.5B teacher (scores + tags), MLM init.
+paths:
+  labels_dir: data/labels/qwen1_5b
+  output_dir: checkpoints/model1_student_B
+targets:
+  source: qwen1_5b

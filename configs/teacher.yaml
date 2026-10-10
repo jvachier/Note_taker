@@ -1,0 +1,17 @@
+name: model1_teacher
+description: Qwen teacher labelling of DialogSum utterances (Kaggle + vLLM only).
+seed: 0
+teachers:
+  qwen7b: Qwen/Qwen2.5-7B-Instruct-AWQ
+  qwen1_5b: Qwen/Qwen2.5-1.5B-Instruct
+generation:
+  temperature: 0.0
+  max_new_tokens: 2048     # not in PLAN: room for one JSON entry per utterance
+max_retries: 1
+score_range: [0, 10]
+tags: [none, key_point, decision, action_item]
+splits: [train, validation, test]
+fallback_train_subset: 5000
+paths:
+  processed_dir: data/processed/model1
+  output_dir: data/labels

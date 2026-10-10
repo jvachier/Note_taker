@@ -1,0 +1,8 @@
+name: model1_oracle
+description: Greedy ROUGE oracle labels (selected=1, others=0).
+seed: 0
+rouge_types: [rouge1, rouge2]
+max_utterances: 3
+paths:
+  processed_dir: data/processed/model1
+  output_dir: data/labels/oracle

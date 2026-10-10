@@ -218,3 +218,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Project ---
+.DS_Store
+data/
+checkpoints/
+release/
+*.npy
+*.npz
+*.keras
+*.weights.h5
+claude-code-setup.zip
+.claude/settings.local.json

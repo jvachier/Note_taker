@@ -1,0 +1,23 @@
+base: model2.yaml
+name: model2_cleanup_tiny
+description: CPU smoke test for Model 2 (must finish in < 2 minutes).
+seeds: [0]
+max_hours: 0.03
+paths:
+  processed_dir: data/processed/model2_tiny
+  output_dir: checkpoints/model2_tiny
+data:
+  max_len: 32
+model:
+  d_model: 32
+  num_layers: 1
+  num_heads: 2
+  ffn_dim: 64
+  max_len: 32
+optimizer:
+  warmup_steps: 5
+training:
+  batch_size: 8
+  epochs: 1
+  max_steps: 50
+  mixed_precision: float32

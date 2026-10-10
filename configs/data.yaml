@@ -1,0 +1,13 @@
+name: data
+description: Download WikiText-103 (raw) and DialogSum with their official splits.
+seed: 0
+wikitext:
+  hf_path: wikitext
+  hf_config: wikitext-103-raw-v1
+  splits: [train, validation, test]
+dialogsum:
+  hf_path: knkarthick/dialogsum
+  splits: [train, validation, test]
+paths:
+  raw_dir: data/raw
+  processed_dir: data/processed

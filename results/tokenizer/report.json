@@ -1,0 +1,17 @@
+{
+  "vocab_size": 16000,
+  "wikitext_test": {
+    "texts": 2185,
+    "words": 238306,
+    "tokens": 274886,
+    "subwords_per_word": 1.1535,
+    "unk_rate": 8e-05
+  },
+  "dialogsum_test": {
+    "texts": 4853,
+    "words": 80339,
+    "tokens": 83735,
+    "subwords_per_word": 1.0423,
+    "unk_rate": 0.0
+  }
+}

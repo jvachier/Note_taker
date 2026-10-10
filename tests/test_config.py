@@ -130,7 +130,10 @@ def test_students_differ_only_in_targets(configs_dir):
         assert cfg["seeds"] == [0, 1, 2]
 
 
-@pytest.mark.parametrize("tiny", sorted(p.name for p in CONFIG_FILES if "_tiny" in p.name))
+MODEL_TINY = sorted(p.name for p in CONFIG_FILES if "_tiny" in p.name and "tokenizer" not in p.name)
+
+
+@pytest.mark.parametrize("tiny", MODEL_TINY)
 def test_tiny_configs_are_small(configs_dir, tiny):
     cfg = load_config(configs_dir / tiny)
     assert cfg["training"]["max_steps"] <= 50

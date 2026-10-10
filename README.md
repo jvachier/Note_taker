@@ -14,5 +14,12 @@ uv run pytest -q
 uv run ruff check . --fix && uv run ruff format .
 ```
 
+Pipeline stages (local; outputs under the git-ignored `data/`):
+
+```bash
+uv run python -m src.data.download --config configs/data.yaml        # Stage 2: data + splits
+uv run python -m src.tokenizer.train --config configs/tokenizer.yaml # Stage 3: WordPiece
+```
+
 Configs live in `configs/`. A config can inherit from another with `base: <file>.yaml`;
 `src.config.load_config` returns the fully resolved dict.

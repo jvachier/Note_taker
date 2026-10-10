@@ -49,6 +49,19 @@ tests/
 **Splits**: use the official DialogSum splits. For WikiText use the official train/valid/test.
 Test: no dialogue ID appears in more than one split.
 
+**Deduplication (approved deviation)**: train items duplicated in validation/test are removed;
+validation and test are never modified.
+- DialogSum: 32 train dialogues whose utterance text equals a validation dialogue are dropped
+  (12,460 → 12,428). 6 validation/test duplicates remain and are only reported.
+- WikiText: 1 train article whose title is also a test article ("The Hustler (film)") is dropped.
+- DialogSum test rows (`test_<n>_<k>`, 1,500) are merged into 500 dialogues with 3 references.
+- 6 empty speaker turns (tag with no text) in DialogSum train are dropped.
+
+**WikiText detokenisation (approved deviation)**: raw files keep the original tokenised text.
+Every consumer (tokenizer corpus, Model 2 examples) reads it through
+`src.data.wikitext.detokenize`, which undoes ` @-@ ` / ` @,@ ` / ` @.@ ` and the spaces around
+punctuation, quotes, brackets and clitics (`don 't` → `don't`). Heading lines are skipped.
+
 ---
 
 ## 2. Tokenizer (shared by both models)
@@ -58,7 +71,7 @@ Test: no dialogue ID appears in more than one split.
 - **Normalisation**: lowercase, strip accents, NFD. Uncased is deliberate: Model 2 input is lowercase by construction, and Model 1 does not need case.
 - **Pre-tokenisation**: whitespace + punctuation split (so `,` `.` `?` are their own tokens for Model 1).
 - **Special tokens**: `[PAD]=0, [UNK], [CLS], [SEP], [MASK]`, plus speaker tokens `[S1]`…`[S8]` reserved.
-- **Training corpus**: WikiText-103 train + DialogSum train dialogues (no val/test text).
+- **Training corpus**: WikiText-103 train (detokenised, headings skipped) + DialogSum train utterances (speaker tags removed). No val/test text.
 - **Output**: `tokenizer.json` + `vocab.txt`, versioned with the models and uploaded with them.
 - **Report**: average subword tokens per word on WikiText and DialogSum test, `[UNK]` rate.
 

@@ -221,9 +221,9 @@ __marimo__/
 
 # --- Project ---
 .DS_Store
-data/
-checkpoints/
-release/
+/data/
+/checkpoints/
+/release/
 *.npy
 *.npz
 *.keras

@@ -1,0 +1,143 @@
+{
+  "dialogsum": {
+    "train": {
+      "dialogues": 12428,
+      "utterances_per_dialogue": {
+        "mean": 9.49,
+        "p50": 9.0,
+        "p95": 16.0,
+        "max": 61
+      },
+      "words_per_utterance": {
+        "mean": 12.8,
+        "p50": 10.0,
+        "p95": 32.0,
+        "max": 254
+      },
+      "words_per_dialogue": {
+        "mean": 121.5,
+        "p50": 107.0,
+        "p95": 242.0,
+        "max": 952
+      },
+      "speakers_per_dialogue": {
+        "mean": 2.01,
+        "p50": 2.0,
+        "p95": 2.0,
+        "max": 7
+      },
+      "utterances_by_speaker": {
+        "1": 61217,
+        "2": 56348,
+        "3": 382,
+        "4": 34,
+        "5": 5,
+        "6": 6,
+        "7": 2
+      },
+      "references_per_dialogue": {
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "max": 1
+      }
+    },
+    "validation": {
+      "dialogues": 500,
+      "utterances_per_dialogue": {
+        "mean": 9.38,
+        "p50": 9.0,
+        "p95": 16.0,
+        "max": 29
+      },
+      "words_per_utterance": {
+        "mean": 12.79,
+        "p50": 10.0,
+        "p95": 33.0,
+        "max": 152
+      },
+      "words_per_dialogue": {
+        "mean": 119.96,
+        "p50": 106.5,
+        "p95": 233.49999999999955,
+        "max": 459
+      },
+      "speakers_per_dialogue": {
+        "mean": 2.01,
+        "p50": 2.0,
+        "p95": 2.0,
+        "max": 4
+      },
+      "utterances_by_speaker": {
+        "1": 2436,
+        "2": 2247,
+        "3": 6,
+        "4": 1
+      },
+      "references_per_dialogue": {
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "max": 1
+      }
+    },
+    "test": {
+      "dialogues": 500,
+      "utterances_per_dialogue": {
+        "mean": 9.71,
+        "p50": 9.0,
+        "p95": 16.0,
+        "max": 65
+      },
+      "words_per_utterance": {
+        "mean": 12.85,
+        "p50": 10.0,
+        "p95": 32.0,
+        "max": 144
+      },
+      "words_per_dialogue": {
+        "mean": 124.76,
+        "p50": 110.0,
+        "p95": 243.0,
+        "max": 726
+      },
+      "speakers_per_dialogue": {
+        "mean": 2.01,
+        "p50": 2.0,
+        "p95": 2.0,
+        "max": 3
+      },
+      "utterances_by_speaker": {
+        "1": 2525,
+        "2": 2313,
+        "3": 15
+      },
+      "references_per_dialogue": {
+        "mean": 3.0,
+        "p50": 3.0,
+        "p95": 3.0,
+        "max": 3
+      }
+    }
+  },
+  "wikitext": {
+    "train": {
+      "lines": 1801294,
+      "nonempty_lines": 1164988,
+      "articles": 29443,
+      "words": 101422194
+    },
+    "validation": {
+      "lines": 3760,
+      "nonempty_lines": 2461,
+      "articles": 60,
+      "words": 213886
+    },
+    "test": {
+      "lines": 4358,
+      "nonempty_lines": 2891,
+      "articles": 62,
+      "words": 241211
+    }
+  }
+}

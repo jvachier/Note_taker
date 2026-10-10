@@ -7,11 +7,22 @@ teachers:
 generation:
   temperature: 0.0
   max_new_tokens: 2048     # not in PLAN: room for one JSON entry per utterance
-max_retries: 1
+max_retries: 1             # retry = the invalid answer + a correction message (greedy decoding)
 score_range: [0, 10]
 tags: [none, key_point, decision, action_item]
 splits: [train, validation, test]
-fallback_train_subset: 5000
+train_subset: null         # null = all train dialogues; PLAN fallback: 5000 (same subset per teacher)
+batch_dialogues: 256       # not in PLAN: dialogues per generation call (= resume granularity)
+vllm:                      # not in PLAN: engine settings for a T4 (no bf16)
+  dtype: half
+  max_model_len: 6144
+  gpu_memory_utilization: 0.9
+  tensor_parallel_size: 1
+fallback:                  # used only if vLLM fails to install (PLAN 5.3)
+  models:
+    qwen7b: Qwen/Qwen2.5-7B-Instruct
+    qwen1_5b: Qwen/Qwen2.5-1.5B-Instruct
+  batch_size: 8
 paths:
-  processed_dir: data/processed/model1
+  raw_dir: data/raw
   output_dir: data/labels

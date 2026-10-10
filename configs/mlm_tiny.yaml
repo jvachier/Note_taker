@@ -5,8 +5,10 @@ max_hours: 0.03
 paths:
   processed_dir: data/processed/mlm_tiny
   output_dir: checkpoints/mlm_tiny
+  results_dir: data/results_tiny
 data:
   seq_len: 64
+  max_units: 30
 model:
   d_model: 32
   num_layers: 1
@@ -18,4 +20,5 @@ optimizer:
 training:
   batch_size: 4
   max_steps: 50
+  steps_per_epoch: 10
   mixed_precision: float32

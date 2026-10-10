@@ -28,13 +28,13 @@ src/
   model2_cleanup/   # model, labels, training, eval
   model1_scorer/    # MLM pretraining, teacher labelling, students, eval
   eval/             # shared metrics
-notebooks/kaggle/   # thin notebooks: pip install repo from GitHub, run one stage
+notebooks/kaggle/   # one self-contained notebook per model (own code, no repo imports)
 tests/
 ```
 
 **Data handling**
 - Pre-tokenize everything once to `int32` NumPy arrays (`.npy`, memory-mapped). No `tf.data`, no TF dependency at training time.
-- Each Kaggle stage writes its outputs (arrays, checkpoints, labels) to a Kaggle Dataset that the next stage reads.
+- One Kaggle notebook per model runs its whole pipeline (data, tokenizer, arrays, training, evaluation) and writes to `/kaggle/working`; attaching its previous output resumes it. Trained models and results are pulled into the repo with `notebooks/kaggle/fetch_outputs.py` and used locally (evaluation, results tables, publishing).
 - Checkpoint every epoch (sessions are capped at 12 h, ~30 GPU-h per week).
 
 ---

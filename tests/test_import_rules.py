@@ -45,3 +45,12 @@ def test_scanner_detects_imports(tmp_path):
     f = tmp_path / "m.py"
     f.write_text("import torch.nn\nfrom tensorflow import data\nfrom . import x\n")
     assert _top_level_imports(f) == {"torch", "tensorflow"}
+
+
+TEACHER_FILES = sorted(TEACHER_DIR.rglob("*.py"))
+
+
+@pytest.mark.parametrize("path", TEACHER_FILES, ids=lambda p: p.name)
+def test_teacher_code_never_imports_jax_or_keras(path):
+    """The teachers run in their own vLLM environment, never with training (CLAUDE.md)."""
+    assert not _top_level_imports(path) & {"jax", "keras", "jaxlib"}, path

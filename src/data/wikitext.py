@@ -84,6 +84,24 @@ def detokenize(line: str) -> str:
     return " ".join(out)
 
 
+def iter_articles(lines: Iterable[str]) -> Iterator[list[str]]:
+    """Yield each article as its detokenised paragraphs (headings and blank lines skipped).
+
+    Paragraphs before the first title form their own (unnamed) article. Empty articles are
+    not yielded.
+    """
+    paragraphs: list[str] = []
+    for line in lines:
+        if article_title(line) is not None:
+            if paragraphs:
+                yield paragraphs
+            paragraphs = []
+        elif line.strip() and not is_heading(line):
+            paragraphs.append(detokenize(line))
+    if paragraphs:
+        yield paragraphs
+
+
 def iter_clean_text(lines: Iterable[str]) -> Iterator[str]:
     """Yield detokenised paragraph lines, skipping blank lines and headings."""
     for line in lines:

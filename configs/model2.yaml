@@ -1,23 +1,26 @@
 name: model2_cleanup
 description: Punctuation and casing restoration on noisy lowercase text (~7M params).
 seeds: [0, 1, 2]
-max_hours: 10              # not in PLAN: fits one Kaggle session
+max_hours: 11              # per Kaggle session (12 h cap); shared by all seeds of a session
 paths:
+  raw_dir: data/raw
   tokenizer_dir: data/tokenizer
   processed_dir: data/processed/model2
   output_dir: checkpoints/model2
+  results_dir: results
 data:
+  seed: 0                  # noise / array-building seed (arrays are shared by all training seeds)
   window_words: 64
   max_len: 128
-  dialogsum_oversample: 5
+  train_sources: {wikitext_train: 1, dialogsum_train: 5}   # value = copies (DialogSum x5)
+  validation_sources: [wikitext_validation, dialogsum_validation]
+  test_sources: [wikitext_test, dialogsum_test]
+  max_units: null          # cap on articles / dialogues per source (smoke runs only)
   noise:
     substitution: 0.05
     deletion: 0.03
     insertion: 0.02
     substitution_vocab_size: 20000
-  punctuation_map: {",": comma, ":": comma, ".": period, "!": period, ";": period, "?": question}
-  casing_classes: [lower, capitalised, upper]
-  punct_classes: [none, comma, period, question]
 model:
   vocab_size: 16000
   d_model: 256
@@ -28,7 +31,7 @@ model:
   dropout: 0.1
   init_std: 0.02
 loss:
-  punct_class_weighting: inverse_sqrt_freq
+  punct_class_weighting: inverse_sqrt_freq   # inverse_sqrt_freq | none
   casing_weight: 1.0
   punct_weight: 1.0
 optimizer:
@@ -41,11 +44,12 @@ training:
   batch_size: 128
   epochs: 20               # not in PLAN: upper bound, early stopping decides
   max_steps: null
+  steps_per_epoch: null     # null = one full pass over train
   mixed_precision: mixed_float16
   early_stopping:
     monitor: val_punct_macro_f1
     mode: max
     patience: 3            # not in PLAN
 eval:
+  batch_size: 256
   noise_levels: [0.0, 0.05, 0.10, 0.20]
-  test_sets: [wikitext_test, dialogsum_test]

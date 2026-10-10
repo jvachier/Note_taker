@@ -3,6 +3,8 @@ description: Greedy ROUGE oracle labels (selected=1, others=0).
 seed: 0
 rouge_types: [rouge1, rouge2]
 max_utterances: 3
+use_stemmer: true          # not in PLAN: Porter stemming, as usual for summarisation ROUGE
+splits: [train, validation, test]
 paths:
-  processed_dir: data/processed/model1
+  raw_dir: data/raw
   output_dir: data/labels/oracle

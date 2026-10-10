@@ -49,3 +49,29 @@ def classification_report(
         "macro_f1": float(np.mean([per_class[n]["f1"] for n in seen])) if seen else 0.0,
         "n": int(total),
     }
+
+
+def spearman(pred: Sequence[float], target: Sequence[float]) -> float | None:
+    """Spearman rank correlation (ties get average ranks); ``None`` if either side is constant.
+
+    A dialogue whose scores are all equal (or with fewer than 2 utterances) has no ranking, so
+    it is left out of averages rather than counted as 0.
+    """
+    from scipy.stats import spearmanr
+
+    pred, target = np.asarray(pred, dtype=np.float64), np.asarray(target, dtype=np.float64)
+    if len(pred) < 2 or np.ptp(pred) == 0 or np.ptp(target) == 0:
+        return None
+    return float(spearmanr(pred, target).statistic)
+
+
+def mean_spearman(preds: Sequence[Sequence[float]], targets: Sequence[Sequence[float]]) -> float:
+    """Per-dialogue Spearman, averaged over dialogues where it is defined (0.0 if none)."""
+    values = [s for p, t in zip(preds, targets, strict=True) if (s := spearman(p, t)) is not None]
+    return float(np.mean(values)) if values else 0.0
+
+
+def jaccard(a: Sequence[int], b: Sequence[int]) -> float:
+    """``|a ∩ b| / |a ∪ b|`` of two selections (1.0 when both are empty)."""
+    sa, sb = set(a), set(b)
+    return len(sa & sb) / len(sa | sb) if sa | sb else 1.0

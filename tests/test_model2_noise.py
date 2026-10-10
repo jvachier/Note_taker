@@ -58,8 +58,11 @@ def test_deleting_sentence_start_capitalises_next_word():
 def test_deleting_mid_sentence_capital_does_not_propagate():
     words = label_text("I met Paris friends.")
     out = _noise(words, [[1, 1], [1, 1], [0.0, 1], [1, 1]], dele=0.5)  # delete "Paris"
-    assert [(w.form, w.casing) for w in out] == [("i", CAPITALISED), ("met", LOWER),
-                                                 ("friends", LOWER)]  # fmt: skip
+    assert [(w.form, w.casing) for w in out] == [
+        ("i", CAPITALISED),
+        ("met", LOWER),
+        ("friends", LOWER),
+    ]
 
 
 def test_deleting_first_word_drops_its_punctuation():

@@ -6,7 +6,6 @@ import csv
 import json
 import logging
 import math
-import os
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -15,6 +14,7 @@ from typing import Any
 
 import jax
 import keras
+import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -22,9 +22,47 @@ log = logging.getLogger(__name__)
 NO_DECAY = ["bias", "gamma", "beta", "position_embedding"]
 
 
-def build_optimizer(opt_cfg: dict[str, Any], total_steps: int) -> keras.optimizers.Optimizer:
-    """AdamW with linear warmup to ``peak_lr`` then cosine decay to 0 at ``total_steps``.
+@keras.saving.register_keras_serializable(package="dialogue_models")
+class LayerwiseAdamW(keras.optimizers.AdamW):
+    """AdamW whose learning rate (and decoupled weight decay) is scaled per layer.
 
+    ``lr_multipliers`` maps a layer name to a factor: a variable whose path contains that
+    name as one segment (``.../encoder/...``) uses ``learning_rate * factor``. Other variables
+    use the base learning rate.
+    """
+
+    def __init__(self, lr_multipliers: dict[str, float] | None = None, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.lr_multipliers = dict(lr_multipliers or {})
+
+    def _multiplier(self, variable) -> float:
+        segments = variable.path.split("/")
+        for name, factor in self.lr_multipliers.items():
+            if name in segments:
+                return factor
+        return 1.0
+
+    def update_step(self, gradient, variable, learning_rate):
+        return super().update_step(gradient, variable, learning_rate * self._multiplier(variable))
+
+    def _apply_weight_decay(self, variables) -> None:
+        if self.weight_decay is None:
+            return
+        for variable in variables:
+            if self._use_weight_decay(variable):
+                lr = keras.ops.cast(self.learning_rate, variable.dtype) * self._multiplier(variable)
+                wd = keras.ops.cast(self.weight_decay, variable.dtype)
+                variable.assign(variable - variable * wd * lr)
+
+    def get_config(self) -> dict[str, Any]:
+        return {**super().get_config(), "lr_multipliers": self.lr_multipliers}
+
+
+def build_optimizer(opt_cfg: dict[str, Any], total_steps: int) -> keras.optimizers.Optimizer:
+    """AdamW with linear warmup to the peak learning rate, then cosine decay to 0.
+
+    The peak is ``peak_lr`` for every weight, or ``lr_heads`` with ``lr_encoder`` for the
+    weights of the layer named ``encoder`` (students: smaller steps for pretrained weights).
     ``warmup_steps`` (absolute) or ``warmup_fraction`` (of ``total_steps``) sets the warmup.
     """
     if opt_cfg["name"] != "adamw" or opt_cfg["schedule"] != "cosine":
@@ -34,13 +72,20 @@ def build_optimizer(opt_cfg: dict[str, Any], total_steps: int) -> keras.optimize
     else:
         warmup = int(opt_cfg["warmup_fraction"] * total_steps)
     warmup = min(warmup, max(total_steps - 1, 0))
+    if "lr_heads" in opt_cfg:
+        peak = opt_cfg["lr_heads"]
+        multipliers = {"encoder": opt_cfg["lr_encoder"] / peak}
+    else:
+        peak, multipliers = opt_cfg["peak_lr"], {}
     schedule = keras.optimizers.schedules.CosineDecay(
         initial_learning_rate=0.0,
         decay_steps=max(total_steps - warmup, 1),
-        warmup_target=opt_cfg["peak_lr"],
+        warmup_target=peak,
         warmup_steps=warmup,
     )
-    optimizer = keras.optimizers.AdamW(learning_rate=schedule, weight_decay=opt_cfg["weight_decay"])
+    optimizer = LayerwiseAdamW(
+        lr_multipliers=multipliers, learning_rate=schedule, weight_decay=opt_cfg["weight_decay"]
+    )
     optimizer.exclude_from_weight_decay(var_names=NO_DECAY)
     return optimizer
 
@@ -86,10 +131,44 @@ class TimeGuard(keras.callbacks.Callback):
             self.stopped = self.model.stop_training = True
 
 
-def configure_devices(mixed_precision: str) -> dict[str, Any]:
-    """Set the dtype policy and, with several GPUs, data parallelism. Returns device info."""
+class SyncEpoch(keras.callbacks.Callback):
+    """Call ``dataset.set_epoch(epoch)`` when each epoch starts.
+
+    A dataset that counted epochs itself would restart at 0 after ``BackupAndRestore``
+    resumes a run (and replay the first epoch's shuffle); Keras passes the true epoch here.
+    """
+
+    def __init__(self, dataset: Any) -> None:
+        super().__init__()
+        self.dataset = dataset
+
+    def on_epoch_begin(self, epoch, logs=None) -> None:
+        self.dataset.set_epoch(epoch)
+
+
+def pad_rows(rows: np.ndarray, batch_size: int) -> tuple[np.ndarray, int]:
+    """Pad a partial batch of row indices to ``batch_size`` by repeating the last row.
+
+    Returns ``(rows, n_real)``; give rows ``n_real:`` zero weight (or drop their outputs).
+    Data parallelism splits every batch evenly across devices, so batches are always full.
+    """
+    rows = np.asarray(rows)
+    n_real = len(rows)
+    if 0 < n_real < batch_size:
+        rows = np.concatenate([rows, np.repeat(rows[-1:], batch_size - n_real)])
+    return rows, n_real
+
+
+def configure_devices(mixed_precision: str, *batch_sizes: int) -> dict[str, Any]:
+    """Set the dtype policy and, with several GPUs, data parallelism. Returns device info.
+
+    Every ``batch_sizes`` value must divide evenly across the devices.
+    """
     keras.mixed_precision.set_dtype_policy(mixed_precision)
     devices = jax.devices()
+    for bs in batch_sizes:
+        if bs % len(devices):
+            raise ValueError(f"batch size {bs} is not divisible by the {len(devices)} devices")
     if len(devices) > 1:
         keras.distribution.set_distribution(keras.distribution.DataParallel())
     return {
@@ -113,9 +192,7 @@ def best_logged_value(csv_path: Path, key: str, mode: str) -> float | None:
 
 
 def commit_sha() -> str | None:
-    """``COMMIT_SHA`` env var, else ``git rev-parse HEAD``, else ``None``."""
-    if sha := os.environ.get("COMMIT_SHA"):
-        return sha
+    """``git rev-parse HEAD``, or ``None`` outside a git checkout."""
     try:
         out = subprocess.run(
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, timeout=10

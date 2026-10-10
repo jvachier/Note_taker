@@ -29,11 +29,12 @@ from src.config import load_config
 from src.layers.losses import masked_sparse_ce
 from src.model2_cleanup.build_data import validation_set_name
 from src.model2_cleanup.dataset import ArraySet, CleanupDataset
-from src.model2_cleanup.evaluate import evaluate_all, predict, score
+from src.model2_cleanup.evaluate import evaluate_all, predict, run_paths, score
 from src.model2_cleanup.model import build_cleanup_model
 from src.seed import set_seed
 from src.tokenizer.tokenizer import load_tokenizer
 from src.training import (
+    SyncEpoch,
     TimeGuard,
     best_logged_value,
     build_optimizer,
@@ -45,19 +46,6 @@ from src.training import (
 )
 
 log = logging.getLogger(__name__)
-
-
-def run_paths(cfg: dict[str, Any], seed: int) -> dict[str, Path]:
-    """Checkpoint and results locations for one seed."""
-    out = Path(cfg["paths"]["output_dir"]) / f"seed_{seed}"
-    results = Path(cfg["paths"]["results_dir"]) / cfg["name"] / f"seed_{seed}"
-    return {
-        "checkpoints": out,
-        "backup": out / "backup",
-        "best_model": out / "best.keras",
-        "results": results,
-        "history": results / "history.csv",
-    }
 
 
 class ValidationMetrics(keras.callbacks.Callback):
@@ -112,7 +100,9 @@ def train_seed(
     tr, es_cfg = cfg["training"], cfg["training"]["early_stopping"]
     start, started = time.time(), utc_now()
     set_seed(seed)
-    device_info = configure_devices(tr["mixed_precision"])
+    device_info = configure_devices(
+        tr["mixed_precision"], tr["batch_size"], cfg["eval"]["batch_size"]
+    )
 
     weights = punct_class_weights(cfg)
     train_arrays = ArraySet.load(Path(cfg["paths"]["processed_dir"]) / "train")
@@ -137,6 +127,7 @@ def train_seed(
     paths["results"].mkdir(parents=True, exist_ok=True)
     guard = TimeGuard(cfg["max_hours"], session_start)
     callbacks = [
+        SyncEpoch(train_ds),
         ValidationMetrics(val_arrays, cfg["eval"]["batch_size"]),
         guard,
         keras.callbacks.ModelCheckpoint(

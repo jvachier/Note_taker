@@ -44,8 +44,12 @@ cut off and resumed.
 - Log per-epoch metrics to CSV (`keras.callbacks.CSVLogger`).
 
 ## Teacher labelling (Model 1, special case)
-- CLAUDE.md requires the Qwen teachers to run in their own vLLM environment, never with
-  training. How this fits "one notebook for Model 1" is still to be decided with the user.
+- The teachers run inside the Model 1 notebook but in **their own virtual environment**: the
+  notebook writes the labelling script to disk, builds a venv with vLLM, and runs it as a
+  subprocess **before** the notebook imports JAX (so JAX has not claimed GPU memory). With two
+  GPUs, one teacher per GPU in parallel (`CUDA_VISIBLE_DEVICES`). The training kernel never
+  imports vLLM or PyTorch. In smoke mode a deterministic fake teacher replaces Qwen.
+- A labelling deadline leaves time for the other phases of the session.
 - Model: `Qwen/Qwen2.5-7B-Instruct-AWQ` or `Qwen/Qwen2.5-1.5B-Instruct`, temperature 0.
 - Write labels incrementally (JSONL, one dialogue per line) and skip dialogues already labelled,
   so a cut-off session resumes where it stopped.
@@ -58,8 +62,12 @@ run: `uv run python notebooks/kaggle/fetch_outputs.py <notebook>` downloads the 
 to the same paths here; the manifest goes to `results/kaggle/`. Add new notebooks to `PULL`.
 
 ## Before uploading
-- `RUN_NOTEBOOKS=1 uv run pytest tests/test_notebooks.py`: executes the notebook in smoke mode
-  on CPU and loads the saved model with `src/`.
+- `XLA_FLAGS=--xla_force_host_platform_device_count=2 RUN_NOTEBOOKS=1 uv run pytest
+  tests/test_notebooks.py`: executes the notebooks in smoke mode on CPU **with 2 simulated
+  devices** (the same data-parallel batch splitting as Kaggle's T4 x2, so uneven batches fail
+  here, not on Kaggle) and loads the outputs with `src/`.
+- With data parallelism every batch must split evenly: datasets pad a partial last batch with
+  zero-weight rows, and prediction pads to whole batches and drops the padding.
 - `uv run pytest -q` and lint pass.
 - Report: inputs to attach (none, or the previous output to resume), accelerator, expected
   GPU time.

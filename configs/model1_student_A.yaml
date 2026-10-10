@@ -3,11 +3,16 @@ description: Student A, distilled from the Qwen2.5-7B teacher (scores + tags), M
 seeds: [0, 1, 2]
 max_hours: 10              # not in PLAN
 paths:
+  raw_dir: data/raw
   tokenizer_dir: data/tokenizer
   processed_dir: data/processed/model1
   labels_dir: data/labels/qwen7b
   init_checkpoint: checkpoints/mlm/encoder.keras
   output_dir: checkpoints/model1_student_A
+  results_dir: results
+data:
+  max_utterances: 80       # not in PLAN: utterance slots per dialogue (DialogSum max is 65)
+  max_dialogues: null      # cap per split (smoke runs only)
 targets:
   source: qwen7b
   use_tags: true
@@ -27,6 +32,7 @@ loss:
   listwise_lambda: 1.0
   temperature: 2.0
   tag_weight: 0.5
+  score_scale: 10          # not in PLAN: listwise targets on the teacher's 0-10 scale (see losses.py)
 optimizer:
   name: adamw
   lr_encoder: 1.0e-4

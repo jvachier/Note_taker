@@ -73,14 +73,16 @@ def test_resumed_epoch_continues_the_data_order():
     a = MLMDataset(ids, spk, 2, DATA_CFG, 200, seed=3, steps_per_epoch=3)
     first_run = []
     for epoch in range(3):
-        a.epoch = epoch
+        a.set_epoch(epoch)
         first_run += [a[i][1] for i in range(len(a))]
     b = MLMDataset(ids, spk, 2, DATA_CFG, 200, seed=3, steps_per_epoch=3)
-    b.epoch = 2  # as set by SyncEpoch after BackupAndRestore
+    b.set_epoch(2)  # as SyncEpoch does after BackupAndRestore
     for i in range(3):
         np.testing.assert_array_equal(b[i][1], first_run[6 + i])
     fixed = MLMDataset(ids, spk, 4, DATA_CFG, 200, seed=3, fixed=True)
-    assert len(fixed) == 3 and len(fixed[2][1]) == 2
+    assert len(fixed) == 3
+    _, labels, weights = fixed[2]  # 10 rows / 4: the last batch has 2 real rows + 2 padding
+    assert len(labels) == 4 and weights[:2].sum() > 0 and (weights[2:] == 0).all()
     np.testing.assert_array_equal(fixed[1][0]["token_ids"], fixed[1][0]["token_ids"])
 
 

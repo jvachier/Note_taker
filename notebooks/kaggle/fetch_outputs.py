@@ -12,8 +12,9 @@ link. It downloads the latest output of the notebook with the Kaggle CLI
 ``data/kaggle/<notebook>/``, or uses an already unzipped download (``--from-dir``), and copies
 the parts listed in ``PULL`` to the same relative paths here:
 
-    checkpoints/model2/seed_<n>/best.keras   checkpoints/model2/tokenizer/
-    results/model2_cleanup/seed_<n>/          results/tables/model2_cleanup.md
+    model2_cleanup  checkpoints/model2/ (best.keras per seed, tokenizer), results/
+    model1_scorer   checkpoints/{mlm,model1_student_*,model1_tokenizer}/, results/,
+                    data/labels/{qwen7b,qwen1_5b,oracle}/
 
 Resume-only state (``backup/``) is skipped. The notebook manifest goes to ``results/kaggle/``.
 """
@@ -32,6 +33,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # What each notebook brings back: relative paths inside its output (= inside the repo).
 PULL: dict[str, list[str]] = {
     "model2_cleanup": ["checkpoints/model2", "results"],
+    # MLM encoder, students, tokenizer; results; teacher + oracle labels (for the evaluation).
+    "model1_scorer": ["checkpoints", "results", "data/labels"],
 }
 SKIP = shutil.ignore_patterns("backup", "__pycache__", ".ipynb_checkpoints")
 

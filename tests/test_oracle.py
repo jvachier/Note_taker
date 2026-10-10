@@ -30,8 +30,12 @@ def test_rouge_matches_rouge_score(pred, ref):
 
 
 def test_greedy_selects_matching_utterances_in_order():
-    utts = ["Hello there.", "We will ship the order on Monday.", "Nice weather.",
-            "The invoice is attached to the email."]  # fmt: skip
+    utts = [
+        "Hello there.",
+        "We will ship the order on Monday.",
+        "Nice weather.",
+        "The invoice is attached to the email.",
+    ]
     ref = ["They will ship the order on Monday and the invoice is in the email."]
     obj = oracle.Objective(utts, ref, ["rouge1", "rouge2"], TOK)
     selected, score = oracle.greedy_oracle(obj, len(utts), 3)

@@ -6,7 +6,7 @@ import numpy as np
 
 from src.config import load_config
 from src.layers.losses import IGNORE
-from src.model2_cleanup import build_data, train
+from src.model2_cleanup import build_data, evaluate, train
 from src.model2_cleanup.dataset import ArraySet, CleanupDataset
 from src.model2_cleanup.evaluate import rule_baseline, score
 from src.model2_cleanup.examples import encode_windows
@@ -66,6 +66,12 @@ def test_build_train_evaluate(tmp_path, configs_dir, tiny_assets):
     train.main(["--config", str(cfg_path), "--all-seeds"])
     assert json.loads((results / "metrics.json").read_text()) == metrics
 
+    # Re-evaluating replaces only the test scores; validation and params stay for the tables.
+    evaluate.main(["--config", str(cfg_path), "--seed", "0"])
+    again = json.loads((results / "metrics.json").read_text())
+    assert again["validation"] == metrics["validation"] and again["params"] == metrics["params"]
+    assert set(again["test"]) == set(metrics["test"])
+
 
 def test_dataset_batches_have_weights(tmp_path, configs_dir, tiny_assets):
     cfg_path = _config(tmp_path, configs_dir, tiny_assets)
@@ -78,8 +84,11 @@ def test_dataset_batches_have_weights(tmp_path, configs_dir, tiny_assets):
     assert (sw["punct"][ignored] == 0).all() and (sw["casing"][ignored] == 0).all()
     assert (y["punct"] >= 0).all()
     first = ds._order.copy()
-    ds.on_epoch_end()
+    ds.set_epoch(1)
     assert not np.array_equal(first, ds._order)
+    resumed = CleanupDataset(arrays, batch_size=4, seed=1)
+    resumed.set_epoch(1)  # a resumed run gets epoch 1's order, not epoch 0's again
+    np.testing.assert_array_equal(resumed._order, ds._order)
     assert len(CleanupDataset(arrays, 4, max_batches=2)) == 2
 
 
@@ -95,8 +104,13 @@ def test_rule_baseline(tiny_assets):
     assert casing["well"] == CAPITALISED and casing["i"] == CAPITALISED
     assert casing["i'm"] == CAPITALISED and casing["think"] == LOWER and casing["ice"] == LOWER
     assert pred["punct"][0, pos[-1]] == PERIOD and (pred["punct"][0, pos[:-1]] == 0).all()
-    perfect = score(arrays, {"casing": np.where(enc.casing < 0, 0, enc.casing),
-                             "punct": np.where(enc.punct < 0, 0, enc.punct)})  # fmt: skip
+    perfect = score(
+        arrays,
+        {
+            "casing": np.where(enc.casing < 0, 0, enc.casing),
+            "punct": np.where(enc.punct < 0, 0, enc.punct),
+        },
+    )
     assert perfect["punct"]["macro_f1"] == 1.0 and perfect["casing"]["accuracy"] == 1.0
 
 

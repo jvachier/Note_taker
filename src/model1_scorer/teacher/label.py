@@ -154,8 +154,13 @@ def label_dialogues(
     """Label ``records`` not yet done, in chunks; one retry with a correction message."""
     done = done_ids(labels_path, failed_path)
     todo = [r for r in records if r["id"] not in done]
-    counts = {"skipped_done": len(records) - len(todo), "labelled": 0, "retried": 0,
-              "failed": 0, "too_long": 0}  # fmt: skip
+    counts = {
+        "skipped_done": len(records) - len(todo),
+        "labelled": 0,
+        "retried": 0,
+        "failed": 0,
+        "too_long": 0,
+    }
     chunk = cfg["batch_dialogues"]
     for start in range(0, len(todo), chunk):
         batch = todo[start : start + chunk]
@@ -183,7 +188,7 @@ def label_dialogues(
                     len(batch[i]["utterances"]),
                     cfg["score_range"],
                     cfg["tags"],
-                )  # fmt: skip
+                )
                 for i in retry
             ]
             for i, a in zip(retry, generate(convs2), strict=True):
@@ -200,9 +205,16 @@ def label_dialogues(
                 bad.append({"id": r["id"], "error": errors[i], "answers": attempts[i]})
             else:
                 lab = results[i]
-                good.append({"id": r["id"], "n": len(r["utterances"]),
-                             "raw_scores": lab.raw_scores, "scores": lab.scores,
-                             "tags": lab.tags, "retried": i in retry})  # fmt: skip
+                good.append(
+                    {
+                        "id": r["id"],
+                        "n": len(r["utterances"]),
+                        "raw_scores": lab.raw_scores,
+                        "scores": lab.scores,
+                        "tags": lab.tags,
+                        "retried": i in retry,
+                    }
+                )
         _append(labels_path, good)
         _append(failed_path, bad)
         counts["labelled"] += len(good)
@@ -210,8 +222,12 @@ def label_dialogues(
     return counts
 
 
-def run(teacher: str, cfg: dict[str, Any], generate: Generate | None = None,
-        backend_info: dict[str, str] | None = None) -> dict[str, Any]:  # fmt: skip
+def run(
+    teacher: str,
+    cfg: dict[str, Any],
+    generate: Generate | None = None,
+    backend_info: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Label every configured split with one teacher; returns (and writes) ``stats.json``."""
     if teacher not in cfg["teachers"]:
         raise ValueError(f"Unknown teacher {teacher!r}; known: {sorted(cfg['teachers'])}")
@@ -224,8 +240,9 @@ def run(teacher: str, cfg: dict[str, Any], generate: Generate | None = None,
     stats.update(teacher=teacher, **(backend_info or {}), config=cfg)
     for split in cfg["splits"]:
         start = time.time()
-        records = select_dialogues(list(read_jsonl(raw / f"{split}.jsonl")), split,
-                                   cfg["train_subset"], cfg["seed"])  # fmt: skip
+        records = select_dialogues(
+            list(read_jsonl(raw / f"{split}.jsonl")), split, cfg["train_subset"], cfg["seed"]
+        )
         counts = label_dialogues(
             generate, records, out / f"{split}.jsonl", out / f"failed_{split}.jsonl", cfg
         )

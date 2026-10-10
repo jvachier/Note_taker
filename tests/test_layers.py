@@ -14,8 +14,9 @@ from src.layers.losses import (
 )
 from src.layers.transformer import TransformerEncoder, TransformerEncoderBlock
 
-ENC = dict(vocab_size=50, max_len=16, d_model=16, num_layers=2, num_heads=2, ffn_dim=32,
-           dropout=0.0)  # fmt: skip
+ENC = dict(
+    vocab_size=50, max_len=16, d_model=16, num_layers=2, num_heads=2, ffn_dim=32, dropout=0.0
+)
 
 
 def _ids(batch=2, length=10, pad_from=6, seed=0):

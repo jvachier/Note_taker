@@ -24,15 +24,30 @@ uv run python -m src.model2_cleanup.train --config configs/model2.yaml --all-see
 uv run python -m src.eval.aggregate --exp model2_cleanup                     # results table
 uv run python -m src.model1_scorer.mlm_data --config configs/mlm.yaml          # Stage 5a: MLM arrays
 uv run python -m src.model1_scorer.mlm_train --config configs/mlm.yaml         # Stage 5b: pretrain
+uv run python -m src.model1_scorer.oracle --config configs/oracle.yaml         # Stage 6b: oracle labels
+uv run python -m src.model1_scorer.data --config configs/model1_student_A.yaml # Stage 7a: student arrays
+uv run python -m src.model1_scorer.train --config configs/model1_student_A.yaml --all-seeds  # 7b (A-D)
+uv run --extra eval python -m src.model1_scorer.evaluate --config configs/model1_eval.yaml  # 7c: table
 ```
 
+Teacher labels (Stage 6a) are produced on Kaggle only, in a vLLM environment:
+`python -m src.model1_scorer.teacher.label --config configs/teacher.yaml --teacher qwen7b`.
+
 Smoke tests (CPU, < 2 min): the Model 2 commands with `configs/model2_tiny.yaml`, the MLM
-commands with `configs/mlm_tiny.yaml`.
-Full runs happen on Kaggle with one self-contained notebook per model:
-`notebooks/kaggle/model2_cleanup.ipynb` (upload it, GPU T4 x2, Internet on, Run All; attach its
-previous output to resume). It does not use this repo's code. Bring the trained models and
-results back with `uv run python notebooks/kaggle/fetch_outputs.py model2_cleanup`
-(into `checkpoints/model2/` and `results/`).
+commands with `configs/mlm_tiny.yaml`, the student commands with
+`configs/model1_student_tiny.yaml` (trains on oracle labels, since teacher labels exist only on
+Kaggle).
+Full runs happen on Kaggle with one self-contained notebook per model (upload it, GPU T4 x2,
+Internet on, Run All; attach its previous output to resume). They do not use this repo's code.
+- `notebooks/kaggle/model2_cleanup.ipynb`: data, tokenizer, training, evaluation (1 session).
+- `notebooks/kaggle/model1_scorer.ipynb`: data, teacher labels (own vLLM environment), oracle,
+  MLM pretraining, students A-D, preview table (2-3 sessions). Attach the Model 2 output too so
+  both models share the exact same tokenizer file.
+
+Bring the outputs back with `uv run python notebooks/kaggle/fetch_outputs.py <notebook>`, then
+for Model 1 build the local test arrays and run the full evaluation (BERTScore, CPU latency):
+`uv run python -m src.model1_scorer.data --config configs/model1_student_A.yaml` and
+`uv run --extra eval python -m src.model1_scorer.evaluate --config configs/model1_eval.yaml`.
 
 Configs live in `configs/`. A config can inherit from another with `base: <file>.yaml`;
 `src.config.load_config` returns the fully resolved dict.

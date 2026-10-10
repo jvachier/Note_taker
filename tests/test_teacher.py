@@ -30,8 +30,10 @@ def test_prompt_numbers_utterances_with_speakers():
 
 
 def test_valid_answer_is_normalised():
-    text = 'Here you go:\n```json\n[{"id": 2, "score": 10, "tag": "decision"},\n' \
-           ' {"id": 1, "score": 0.0, "tag": "none"}]\n```'  # fmt: skip
+    text = (
+        'Here you go:\n```json\n[{"id": 2, "score": 10, "tag": "decision"},\n'
+        ' {"id": 1, "score": 0.0, "tag": "none"}]\n```'
+    )
     labels = validate_answer(text, 2, [0, 10], TAGS)
     assert labels.raw_scores == [0, 10] and labels.scores == [0.0, 1.0]
     assert labels.tags == ["none", "decision"]
@@ -79,8 +81,10 @@ DIALOGUES = [
 def raw(tmp_path):
     """DialogSum-style raw files with unique dialogue IDs."""
     for split in ("validation", "test"):
-        records = [{"id": f"{split}_{i}", "speakers": [1, 2, 1], "utterances": DIALOGUES[i % 2]}
-                   for i in range(6)]  # fmt: skip
+        records = [
+            {"id": f"{split}_{i}", "speakers": [1, 2, 1], "utterances": DIALOGUES[i % 2]}
+            for i in range(6)
+        ]
         write_jsonl(tmp_path / "raw" / "dialogsum" / f"{split}.jsonl", records)
     return tmp_path / "raw"
 

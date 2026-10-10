@@ -40,19 +40,20 @@ from src.config import load_config
 from src.layers.losses import masked_sparse_ce
 from src.model1_scorer.mlm_model import build_mlm_model, encoder_model
 from src.seed import set_seed
-from src.tokenizer.tokenizer import MASK_ID, NUM_SPEAKERS, SPECIAL_TOKENS
+from src.tokenizer.tokenizer import MASK_ID, SPECIAL_TOKENS
 from src.training import (
+    SyncEpoch,
     TimeGuard,
     build_optimizer,
     commit_sha,
     configure_devices,
+    pad_rows,
     utc_now,
     write_json,
 )
 
 log = logging.getLogger(__name__)
 FIRST_REGULAR_ID = len(SPECIAL_TOKENS)  # IDs below this are special tokens, never masked
-assert FIRST_REGULAR_ID == MASK_ID + NUM_SPEAKERS + 1
 
 
 def num_predictions(seq_len: int, mask_prob: float) -> int:
@@ -98,7 +99,8 @@ class MLMDataset(keras.utils.PyDataset):
 
     Training (``fixed=False``): global batch ``g = epoch * steps_per_epoch + index`` walks a
     fresh permutation of the rows on every pass, and masks are drawn from ``(seed, g)``; the
-    epoch is set by :class:`SyncEpoch`, so a resumed run continues the same sequence.
+    epoch is set by :class:`~src.training.SyncEpoch`, so a resumed run continues the same
+    sequence.
     Evaluation (``fixed=True``): rows in order, masks from ``(seed, index)``, identical every
     time.
     """
@@ -129,6 +131,10 @@ class MLMDataset(keras.utils.PyDataset):
     def __len__(self) -> int:
         return self.batches_per_pass if self.fixed else self.steps_per_epoch
 
+    def set_epoch(self, epoch: int) -> None:
+        """Training position (called by :class:`~src.training.SyncEpoch`)."""
+        self.epoch = epoch
+
     def _rows(self, g: int) -> np.ndarray:
         if self.fixed:
             end = min((g + 1) * self.batch_size, len(self.token_ids))
@@ -142,27 +148,17 @@ class MLMDataset(keras.utils.PyDataset):
 
     def __getitem__(self, index: int):
         g = index if self.fixed else self.epoch * self.steps_per_epoch + index
-        rows = self._rows(g)
+        rows, n_real = pad_rows(self._rows(g), self.batch_size)
         ids = np.asarray(self.token_ids[rows], dtype=np.int32)
         rng = np.random.default_rng([self.seed, g])
         inputs, positions, labels, weights = mask_batch(ids, self.data_cfg, self.vocab_size, rng)
+        weights[n_real:] = 0.0  # padding rows of a partial last batch do not count
         x = {
             "token_ids": inputs,
             "speaker_ids": np.asarray(self.speaker_ids[rows], dtype=np.int32),
             "masked_positions": positions,
         }
         return x, labels, weights
-
-
-class SyncEpoch(keras.callbacks.Callback):
-    """Tell the training dataset which epoch is starting (also after a resume)."""
-
-    def __init__(self, dataset: MLMDataset) -> None:
-        super().__init__()
-        self.dataset = dataset
-
-    def on_epoch_begin(self, epoch, logs=None) -> None:
-        self.dataset.epoch = epoch
 
 
 class SaveEncoder(keras.callbacks.Callback):
@@ -275,7 +271,7 @@ def train(cfg: dict[str, Any], seed: int) -> dict[str, Any]:
         raise FileExistsError(f"{results} is complete; use a new experiment name.")
     start, started = time.time(), utc_now()
     set_seed(seed)
-    device_info = configure_devices(tr["mixed_precision"])
+    device_info = configure_devices(tr["mixed_precision"], tr["batch_size"])
     processed = Path(paths["processed_dir"])
     vocab = cfg["model"]["vocab_size"]
 

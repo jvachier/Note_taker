@@ -81,5 +81,4 @@ def retry_messages(
     """
     lo, hi = score_range
     retry = RETRY.format(error=error, n=n, lo=lo, hi=hi, tags=_tags(tags))
-    return [*messages, {"role": "assistant", "content": answer},
-            {"role": "user", "content": retry}]  # fmt: skip
+    return [*messages, {"role": "assistant", "content": answer}, {"role": "user", "content": retry}]

@@ -97,8 +97,12 @@ def label_record(record: dict[str, Any], cfg: dict[str, Any], tokenizer: Default
     n = len(record["utterances"])
     selected, score = greedy_oracle(objective, n, cfg["max_utterances"])
     labels = [int(i in selected) for i in range(n)]
-    return {"id": record["id"], "labels": labels, "selected": selected,
-            "objective": round(score, 6)}  # fmt: skip
+    return {
+        "id": record["id"],
+        "labels": labels,
+        "selected": selected,
+        "objective": round(score, 6),
+    }
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -54,3 +54,21 @@ TEACHER_FILES = sorted(TEACHER_DIR.rglob("*.py"))
 def test_teacher_code_never_imports_jax_or_keras(path):
     """The teachers run in their own vLLM environment, never with training (CLAUDE.md)."""
     assert not _top_level_imports(path) & {"jax", "keras", "jaxlib"}, path
+
+
+@pytest.mark.parametrize(
+    "module",
+    ["src.model2_cleanup.train", "src.model1_scorer.mlm_train", "src.model1_scorer.train"],
+)
+def test_training_code_does_not_load_eval_metrics(module):
+    """ROUGE / BERTScore are evaluation-only, also indirectly (CLAUDE.md)."""
+    import subprocess
+    import sys
+
+    code = (
+        f"import sys, {module}; "
+        "print(sorted(m for m in sys.modules if m.split('.')[0] in "
+        "{'rouge_score', 'bert_score', 'torch'}))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "[]", out.stdout

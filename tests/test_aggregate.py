@@ -23,9 +23,14 @@ def test_model2_table(tmp_path):
             "seed": seed,
             "params": 7_000_000,
             "validation": _report(f1),
-            "test": {"test_wikitext_noise10": {"noise": 0.1, "baseline": _report(0.3),
-                                               "model": _report(f1)}},
-        }  # fmt: skip
+            "test": {
+                "test_wikitext_noise10": {
+                    "noise": 0.1,
+                    "baseline": _report(0.3),
+                    "model": _report(f1),
+                }
+            },
+        }
         path = tmp_path / "exp" / f"seed_{seed}" / "metrics.json"
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps(metrics))

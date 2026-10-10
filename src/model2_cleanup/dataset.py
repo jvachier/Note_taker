@@ -13,6 +13,7 @@ import keras
 import numpy as np
 
 from src.layers.losses import label_weights, safe_labels
+from src.training import pad_rows
 
 
 @dataclass
@@ -65,7 +66,8 @@ class CleanupDataset(keras.utils.PyDataset):
         arrays: the array set.
         batch_size: windows per batch.
         punct_class_weights: per-class weights for the punctuation loss (``None`` = uniform).
-        shuffle: shuffle windows each epoch with ``seed`` (epoch-dependent).
+        shuffle: shuffle windows each epoch with ``(seed, epoch)``; the epoch comes from
+            :meth:`set_epoch`, so a resumed run continues the same sequence.
         max_batches: cap on batches per epoch (smoke runs).
         drop_last: drop the last incomplete batch (keeps shapes static for JAX).
     """
@@ -106,14 +108,19 @@ class CleanupDataset(keras.utils.PyDataset):
 
     def __getitem__(self, index: int):
         idx = np.sort(self._order[index * self.batch_size : (index + 1) * self.batch_size])
+        idx, n_real = pad_rows(idx, self.batch_size)
         ids = np.asarray(self.arrays.token_ids[idx], dtype=np.int32)
         y, sw = make_targets(
             np.asarray(self.arrays.casing[idx]),
             np.asarray(self.arrays.punct[idx]),
             self.punct_class_weights,
         )
+        for weights in sw.values():
+            weights[n_real:] = 0.0  # padding rows of a partial last batch do not count
         return ids, y, sw
 
-    def on_epoch_end(self) -> None:
-        self.epoch += 1
-        self._order = self._make_order()
+    def set_epoch(self, epoch: int) -> None:
+        """Reshuffle for ``epoch`` (called by :class:`src.training.SyncEpoch`)."""
+        if epoch != self.epoch:
+            self.epoch = epoch
+            self._order = self._make_order()

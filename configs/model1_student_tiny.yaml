@@ -4,8 +4,16 @@ description: CPU smoke test for student training (must finish in < 2 minutes).
 seeds: [0]
 max_hours: 0.03
 paths:
+  processed_dir: data/processed/model1_tiny
+  labels_dir: data/labels/oracle   # teacher labels exist only on Kaggle; oracle runs locally
   init_checkpoint: null
   output_dir: checkpoints/model1_student_tiny
+  results_dir: data/results_tiny
+targets:
+  source: oracle
+  use_tags: false
+data:
+  max_dialogues: 200
 init: random
 model:
   d_model: 32

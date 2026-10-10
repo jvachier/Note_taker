@@ -23,8 +23,10 @@ metrics and tests. Read it before writing code. If something here conflicts with
   `@keras.saving.register_keras_serializable(package="dialogue_models")` and implement `get_config`.
 - **No pretrained weights or pretrained tokenizers** in our models. The tokenizer is trained by us
   with the `tokenizers` library (WordPiece).
-- The Qwen teachers are used **only** to produce labels, only in `src/model1_scorer/teacher/`,
-  and only on Kaggle. They run in their own notebook (vLLM), never in the same environment as training.
+- The Qwen teachers are used **only** to produce labels, only on Kaggle, and never in the same
+  environment as training: in `src/model1_scorer/teacher/` (reference code, tested locally with a
+  fake teacher) and in the Model 1 notebook, where they run in their own virtual environment
+  (vLLM) as a subprocess before JAX starts.
 - BERTScore and ROUGE are evaluation-only; never import them in training code.
 
 ## Data and configs

@@ -11,6 +11,7 @@ the rule baseline, and writes ``results/<name>/seed_<n>/metrics.json``.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -33,10 +34,31 @@ PUNCT_MACRO = ("comma", "period", "question")
 CASING_MACRO = ("capitalised", "upper")
 
 
+def run_paths(cfg: dict[str, Any], seed: int) -> dict[str, Path]:
+    """Checkpoint and results locations for one seed."""
+    out = Path(cfg["paths"]["output_dir"]) / f"seed_{seed}"
+    results = Path(cfg["paths"]["results_dir"]) / cfg["name"] / f"seed_{seed}"
+    return {
+        "checkpoints": out,
+        "backup": out / "backup",
+        "best_model": out / "best.keras",
+        "results": results,
+        "history": results / "history.csv",
+    }
+
+
 def predict(model: keras.Model, token_ids: np.ndarray, batch_size: int) -> dict[str, np.ndarray]:
-    """Argmax class per position for both heads."""
-    out = model.predict(np.asarray(token_ids), batch_size=batch_size, verbose=0)
-    return {k: np.argmax(v, axis=-1) for k, v in out.items()}
+    """Argmax class per position for both heads.
+
+    The input is padded to a whole number of batches (data parallelism splits every batch
+    evenly across devices) and the padding is dropped from the output.
+    """
+    ids = np.asarray(token_ids)
+    n = len(ids)
+    if n % batch_size:
+        ids = np.concatenate([ids, np.repeat(ids[-1:], batch_size - n % batch_size, axis=0)])
+    out = model.predict(ids, batch_size=batch_size, verbose=0)
+    return {k: np.argmax(v[:n], axis=-1) for k, v in out.items()}
 
 
 def score(arrays: ArraySet, pred: dict[str, np.ndarray]) -> dict[str, Any]:
@@ -105,12 +127,14 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     cfg = load_config(args.config)
-    from src.model2_cleanup.train import run_paths  # avoid a circular import at module load
-
     paths = run_paths(cfg, args.seed)
     model = keras.saving.load_model(paths["best_model"])
     tokenizer = load_tokenizer(cfg["paths"]["tokenizer_dir"])
-    write_json(paths["results"] / "metrics.json", {"test": evaluate_all(model, cfg, tokenizer)})
+    metrics_path = paths["results"] / "metrics.json"
+    # Keep validation scores and params from training; only the test entry is replaced.
+    metrics = json.loads(metrics_path.read_text()) if metrics_path.exists() else {}
+    metrics["test"] = evaluate_all(model, cfg, tokenizer)
+    write_json(metrics_path, metrics)
 
 
 if __name__ == "__main__":

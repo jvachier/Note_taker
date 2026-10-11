@@ -1,0 +1,10 @@
+name: human_eval
+description: Human review of both models on hand-written realistic inputs (not in PLAN).
+seed: 0
+inputs: results/human_eval/inputs.yaml
+report: results/human_eval/report.md
+tokenizer_dir: data/tokenizer
+model2_config: configs/model2.yaml      # seed with the best validation punct macro-F1
+model1_configs:                         # seed with the best validation Spearman, each
+  - configs/model1_student_A.yaml       # main student (7B teacher); also used in the pipeline
+  - configs/model1_student_C.yaml       # oracle-trained student, for comparison

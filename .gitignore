@@ -231,3 +231,5 @@ __marimo__/
 claude-code-setup.zip
 .claude/settings.local.json
 results_notebook2/
+results_notebook1/
+results/

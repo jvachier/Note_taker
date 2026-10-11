@@ -105,7 +105,7 @@ def cpu_latency_ms(checkpoint: Path, processed_dir: Path, n: int) -> float:
     from src.model1_scorer.data import StudentSet
     from src.model1_scorer.train import model_inputs
 
-    model = keras.saving.load_model(checkpoint)
+    model = keras.saving.load_model(checkpoint, compile=False)  # no optimizer needed
     data = StudentSet.load(processed_dir / "test")
     rows = np.arange(min(n, len(data)) + 1)
     times = []
@@ -119,12 +119,17 @@ def cpu_latency_ms(checkpoint: Path, processed_dir: Path, n: int) -> float:
 
 
 def teacher_throughput_ms(stats_path: Path) -> float | None:
-    """Labelling time per dialogue on Kaggle (GPU, batched), from the teacher's stats.json."""
+    """Labelling time per dialogue on Kaggle (GPU, batched), from the teacher's stats.json.
+
+    Reads both layouts: :mod:`~src.model1_scorer.teacher.label` (``seconds_this_session`` and
+    ``this_session`` counts) and the Kaggle notebook (``seconds`` and counts per split).
+    """
     if not stats_path.exists():
         return None
     splits = json.loads(stats_path.read_text())["splits"].values()
-    seconds = sum(s["seconds_this_session"] for s in splits)
-    done = sum(s["this_session"]["labelled"] + s["this_session"]["failed"] for s in splits)
+    seconds = sum(s.get("seconds_this_session", s.get("seconds", 0.0)) for s in splits)
+    counts = [s.get("this_session", s) for s in splits]
+    done = sum(c["labelled"] + c["failed"] for c in counts)
     return seconds / done * 1000 if done else None
 
 

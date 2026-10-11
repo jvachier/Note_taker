@@ -18,6 +18,7 @@ vllm:                      # not in PLAN: engine settings for a T4 (no bf16)
   max_model_len: 6144
   gpu_memory_utilization: 0.9
   tensor_parallel_size: 1
+  enable_prefix_caching: true  # the system prompt + instructions are shared by every request
 fallback:                  # used only if vLLM fails to install (PLAN 5.3)
   models:
     qwen7b: Qwen/Qwen2.5-7B-Instruct

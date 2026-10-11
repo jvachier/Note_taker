@@ -102,7 +102,7 @@ def test_model1_notebook_teacher_runs_outside_jax():
     code = _code(KAGGLE / "model1_scorer.ipynb")
     assert (
         code.index("TEACHER_SCRIPT = r'''")
-        < code.index("subprocess.Popen")
+        < code.index("subprocess.run(cmd, env=env)")
         < code.index("import jax")
     )
     script = code[

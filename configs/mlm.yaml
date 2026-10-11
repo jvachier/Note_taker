@@ -36,7 +36,7 @@ optimizer:
 training:
   batch_size: 64
   max_steps: null          # null = measure throughput, then fit target_hours
-  target_hours: 9          # PLAN: ~8-10 GPU-hours
+  target_hours: 3          # PLAN says ~8-10 GPU-hours; 3 approved (~8 corpus passes, 1 session)
   probe_steps: 50          # throughput probe length (timed on its second epoch)
   steps_per_epoch: 1000    # not in PLAN: checkpoint / held-out evaluation interval
   mixed_precision: mixed_float16

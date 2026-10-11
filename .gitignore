@@ -230,3 +230,4 @@ __marimo__/
 *.weights.h5
 claude-code-setup.zip
 .claude/settings.local.json
+results_notebook2/

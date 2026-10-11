@@ -42,7 +42,7 @@ optimizer:
   weight_decay: 0.01
 training:
   batch_size: 128
-  epochs: 8                # not in PLAN: cosine decays to 0 over 8 epochs; early stopping may cut it
+  epochs: 20               # not in PLAN: upper bound, early stopping decides
   max_steps: null
   steps_per_epoch: null     # null = one full pass over train
   mixed_precision: mixed_float16

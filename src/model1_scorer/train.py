@@ -25,6 +25,7 @@ import logging
 import math
 import shutil
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,7 @@ from src.model1_scorer.data import TAGS, StudentSet, Targets, load_targets
 from src.model1_scorer.losses import ImportanceLoss
 from src.model1_scorer.model import build_student, load_encoder_weights
 from src.seed import set_seed
+from src.tokenizer.tokenizer import PAD_ID
 from src.training import (
     SyncEpoch,
     TimeGuard,
@@ -68,19 +70,61 @@ def run_paths(cfg: dict[str, Any], seed: int) -> dict[str, Path]:
     }
 
 
-def model_inputs(data: StudentSet, rows: np.ndarray) -> dict[str, np.ndarray]:
+def model_inputs(
+    data: StudentSet, rows: np.ndarray, length: int | None = None
+) -> dict[str, np.ndarray]:
+    """Model inputs for ``rows``, token arrays cut to ``length`` (padding only) if given."""
     return {
-        "token_ids": np.asarray(data.token_ids[rows], dtype=np.int32),
-        "speaker_ids": np.asarray(data.speaker_ids[rows], dtype=np.int32),
+        "token_ids": np.asarray(data.token_ids[rows, :length], dtype=np.int32),
+        "speaker_ids": np.asarray(data.speaker_ids[rows, :length], dtype=np.int32),
         "cls_positions": np.asarray(data.cls_positions[rows], dtype=np.int32),
     }
+
+
+def row_lengths(token_ids: np.ndarray) -> np.ndarray:
+    """Non-padding length of each row (content first, then padding)."""
+    content = np.asarray(token_ids) != PAD_ID
+    return np.where(content.any(1), content.shape[1] - np.argmax(content[:, ::-1], axis=1), 0)
+
+
+def bucket_length(n: int, buckets: Sequence[int], width: int) -> int:
+    """Smallest bucket >= ``n``, at most ``width`` (few distinct shapes -> few compilations)."""
+    return min(next((b for b in sorted(buckets) if b >= n), width), width)
+
+
+def length_batches(
+    rows: np.ndarray,
+    lengths: np.ndarray,
+    batch_size: int,
+    rng: np.random.Generator | None = None,
+    pool_batches: int = 50,
+) -> list[np.ndarray]:
+    """Split ``rows`` into batches of dialogues of similar length (``lengths`` per row index).
+
+    With ``rng`` (training): shuffle, cut into pools of ``pool_batches`` batches, sort each pool
+    by length, batch it, then shuffle the batch order. Without (evaluation): sort all rows by
+    length. The last batch may be partial.
+    """
+    rows = np.asarray(rows)
+    if rng is None:
+        order = rows[np.argsort(lengths[rows], kind="stable")]
+        return [order[i : i + batch_size] for i in range(0, len(order), batch_size)]
+    order, pool = rows[rng.permutation(len(rows))], batch_size * pool_batches
+    batches = []
+    for p in range(0, len(order), pool):
+        chunk = order[p : p + pool]
+        chunk = chunk[np.argsort(lengths[chunk], kind="stable")]
+        batches += [chunk[i : i + batch_size] for i in range(0, len(chunk), batch_size)]
+    return [batches[i] for i in rng.permutation(len(batches))]
 
 
 class StudentDataset(keras.utils.PyDataset):
     """Batches of labelled dialogues ``(inputs, targets, sample_weights)``.
 
     ``rows`` are the dialogues to use; with ``shuffle`` they are reshuffled per epoch from
-    ``(seed, epoch)`` (epoch set by :class:`~src.training.SyncEpoch`).
+    ``(seed, epoch)`` (epoch set by :class:`~src.training.SyncEpoch`). With ``buckets``, each
+    batch holds dialogues of similar length (:func:`length_batches`) and its token arrays are
+    cut to the smallest bucket that fits them (throughput only: the cut is padding).
     """
 
     def __init__(
@@ -94,6 +138,8 @@ class StudentDataset(keras.utils.PyDataset):
         seed: int = 0,
         drop_last: bool = True,
         max_batches: int | None = None,
+        buckets: Sequence[int] | None = None,
+        pool_batches: int = 50,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -104,29 +150,45 @@ class StudentDataset(keras.utils.PyDataset):
             shuffle,
             seed,
         )
+        self.drop_last, self.buckets, self.pool_batches = drop_last, buckets, pool_batches
+        self.lengths = row_lengths(data.token_ids) if buckets else None
         n = len(self.rows)
         n_batches = n // batch_size if drop_last else math.ceil(n / batch_size)
         if n_batches == 0:
             raise ValueError(f"{n} dialogues is fewer than one batch of {batch_size}")
         self.n_batches = n_batches if max_batches is None else min(n_batches, max_batches)
         self.epoch = 0
-        self._order = self._make_order()
+        self._batches = self._make_batches()
 
-    def _make_order(self) -> np.ndarray:
-        if not self.shuffle:
-            return self.rows
-        return self.rows[np.random.default_rng([self.seed, self.epoch]).permutation(len(self.rows))]
+    def _make_batches(self) -> list[np.ndarray]:
+        rng = np.random.default_rng([self.seed, self.epoch]) if self.shuffle else None
+        if self.buckets:
+            batches = length_batches(
+                self.rows, self.lengths, self.batch_size, rng, self.pool_batches
+            )
+        else:
+            order = self.rows if rng is None else self.rows[rng.permutation(len(self.rows))]
+            bs = self.batch_size
+            batches = [order[i : i + bs] for i in range(0, len(order), bs)]
+        if self.drop_last:
+            batches = [b for b in batches if len(b) == self.batch_size]
+        return batches[: self.n_batches]
 
     def set_epoch(self, epoch: int) -> None:
         if epoch != self.epoch:
             self.epoch = epoch
-            self._order = self._make_order()
+            self._batches = self._make_batches()
 
     def __len__(self) -> int:
         return self.n_batches
 
     def __getitem__(self, index: int):
-        rows = np.sort(self._order[index * self.batch_size : (index + 1) * self.batch_size])
+        rows = np.sort(self._batches[index])
+        length = (
+            bucket_length(int(self.lengths[rows].max()), self.buckets, self.data.token_ids.shape[1])
+            if self.buckets
+            else None
+        )
         rows, n_real = pad_rows(rows, self.batch_size)
         y = {"importance": self.targets.scores[rows]}
         sw = {"importance": np.ones(len(rows), dtype=np.float32)}
@@ -135,18 +197,32 @@ class StudentDataset(keras.utils.PyDataset):
             y["tags"], sw["tags"] = safe_labels(tags), label_weights(tags)
         for weights in sw.values():
             weights[n_real:] = 0.0  # padding rows of a partial last batch do not count
-        return model_inputs(self.data, rows), y, sw
+        return model_inputs(self.data, rows, length), y, sw
 
 
 def predict_utterances(
-    model: keras.Model, data: StudentSet, rows: np.ndarray, batch_size: int
+    model: keras.Model,
+    data: StudentSet,
+    rows: np.ndarray,
+    batch_size: int,
+    buckets: Sequence[int] | None = None,
 ) -> list[dict[str, list]]:
-    """Per dialogue: importance scores (sigmoid) and, if the model has them, tag names."""
-    out: list[dict[str, list]] = []
-    for start in range(0, len(rows), batch_size):
-        batch = rows[start : start + batch_size]
+    """Per dialogue of ``rows`` (same order): importance scores (sigmoid) and tag names.
+
+    With ``buckets``, dialogues are predicted in batches of similar length, cut to a bucket.
+    """
+    rows = np.asarray(rows)
+    if buckets:
+        lengths = row_lengths(data.token_ids)
+        batches = length_batches(rows, lengths, batch_size)
+    else:
+        batches = [rows[i : i + batch_size] for i in range(0, len(rows), batch_size)]
+    width = data.token_ids.shape[1]
+    by_row: dict[int, dict[str, list]] = {}
+    for batch in batches:
+        length = bucket_length(int(lengths[batch].max()), buckets, width) if buckets else None
         padded, _ = pad_rows(batch, batch_size)
-        pred = model.predict(model_inputs(data, padded), batch_size=batch_size, verbose=0)
+        pred = model.predict(model_inputs(data, padded, length), batch_size=batch_size, verbose=0)
         scores = 1.0 / (1.0 + np.exp(-np.asarray(pred["importance"], dtype=np.float64)))
         tags = np.argmax(pred["tags"], axis=-1) if "tags" in pred else None
         for j, i in enumerate(batch):
@@ -154,13 +230,15 @@ def predict_utterances(
             entry = {"scores": [round(float(s), 6) for s in scores[j, :k]]}
             if tags is not None:
                 entry["tags"] = [TAGS[t] for t in tags[j, :k]]
-            out.append(entry)
-    return out
+            by_row[int(i)] = entry
+    return [by_row[int(i)] for i in rows]
 
 
-def validation_spearman(model, data: StudentSet, targets: Targets, rows, batch_size) -> float:
+def validation_spearman(
+    model, data: StudentSet, targets: Targets, rows, batch_size, buckets=None
+) -> float:
     """Mean per-dialogue Spearman between predicted importance and the targets."""
-    preds = predict_utterances(model, data, rows, batch_size)
+    preds = predict_utterances(model, data, rows, batch_size, buckets)
     truth = [targets.scores[i, : int(data.n_utterances[i])] for i in rows]
     return mean_spearman([p["scores"] for p in preds], truth)
 
@@ -168,13 +246,19 @@ def validation_spearman(model, data: StudentSet, targets: Targets, rows, batch_s
 class ValidationSpearman(keras.callbacks.Callback):
     """Adds ``val_spearman`` to the epoch logs (before checkpoint / early stopping read it)."""
 
-    def __init__(self, data: StudentSet, targets: Targets, rows: np.ndarray, batch_size: int):
+    def __init__(
+        self,
+        data: StudentSet,
+        targets: Targets,
+        rows: np.ndarray,
+        batch_size: int,
+        buckets: Sequence[int] | None = None,
+    ):
         super().__init__()
-        self.args = (data, targets, rows, batch_size)
+        self.args = (data, targets, rows, batch_size, buckets)
 
     def on_epoch_end(self, epoch, logs=None) -> None:
-        data, targets, rows, batch_size = self.args
-        value = validation_spearman(self.model, data, targets, rows, batch_size)
+        value = validation_spearman(self.model, *self.args)
         if logs is not None:
             logs["val_spearman"] = value
 
@@ -222,12 +306,27 @@ def train_seed(cfg: dict[str, Any], seed: int, session_start: float | None = Non
     val_t = load_targets(labels_dir, "validation", val_data, source)
     train_rows, val_rows = np.flatnonzero(train_t.labelled), np.flatnonzero(val_t.labelled)
     spe, epochs, total = steps_for(len(train_rows), tr["batch_size"], tr["epochs"], tr["max_steps"])
-    use_tags = cfg["targets"]["use_tags"]
+    use_tags, buckets = cfg["targets"]["use_tags"], tr["buckets"]
     train_ds = StudentDataset(
-        train_data, train_t, train_rows, tr["batch_size"], use_tags, seed=seed, max_batches=spe
+        train_data,
+        train_t,
+        train_rows,
+        tr["batch_size"],
+        use_tags,
+        seed=seed,
+        max_batches=spe,
+        buckets=buckets,
+        pool_batches=tr["pool_batches"],
     )
     val_ds = StudentDataset(
-        val_data, val_t, val_rows, tr["batch_size"], use_tags, shuffle=False, drop_last=False
+        val_data,
+        val_t,
+        val_rows,
+        tr["batch_size"],
+        use_tags,
+        shuffle=False,
+        drop_last=False,
+        buckets=buckets,
     )
 
     model = build_compiled_student(cfg, total)
@@ -246,7 +345,7 @@ def train_seed(cfg: dict[str, Any], seed: int, session_start: float | None = Non
     eval_bs = tr["batch_size"]
     callbacks = [
         SyncEpoch(train_ds),
-        ValidationSpearman(val_data, val_t, val_rows, eval_bs),
+        ValidationSpearman(val_data, val_t, val_rows, eval_bs, buckets),
         guard,
         keras.callbacks.ModelCheckpoint(
             str(paths["best_model"]),
@@ -289,12 +388,12 @@ def train_seed(cfg: dict[str, Any], seed: int, session_start: float | None = Non
     shutil.rmtree(paths["backup"], ignore_errors=True)
     best = keras.saving.load_model(paths["best_model"])
     test_data = StudentSet.load(processed / "test")
-    preds = predict_utterances(best, test_data, np.arange(len(test_data)), eval_bs)
+    preds = predict_utterances(best, test_data, np.arange(len(test_data)), eval_bs, buckets)
     write_jsonl(
         paths["results"] / "test_predictions.jsonl",
         ({"id": i, **p} for i, p in zip(test_data.ids, preds, strict=True)),
     )
-    val_spearman = validation_spearman(best, val_data, val_t, val_rows, eval_bs)
+    val_spearman = validation_spearman(best, val_data, val_t, val_rows, eval_bs, buckets)
     write_json(
         paths["results"] / "metrics.json",
         {"seed": seed, "params": best.count_params(), "validation": {"spearman": val_spearman}},

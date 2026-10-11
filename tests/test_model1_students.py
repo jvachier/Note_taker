@@ -249,3 +249,73 @@ def test_train_students_and_evaluate(tmp_path, configs_dir, tiny_assets, raw):
     assert ref["jaccard"] == 1.0 and ref["tags"]["decision"]["f1"] == pytest.approx(1.0)
     student = json.loads((tmp_path / "results" / "model1_eval" / "student_a.json").read_text())
     assert student["latency"] != "–" and 0 <= student["runs"][0]["rouge1"] <= 1
+
+
+# --- length buckets -----------------------------------------------------------------------
+
+
+def _student_set(lengths, width=32):
+    """Dialogues of the given token lengths: [CLS] at 0 and at the middle, padding after."""
+    n = len(lengths)
+    ids = np.zeros((n, width), "int32")
+    for i, k in enumerate(lengths):
+        ids[i, :k] = 20 + (np.arange(k) % 7)
+        ids[i, 0] = ids[i, k // 2] = CLS_ID
+    cls = np.array([[0, k // 2] for k in lengths], "int32")
+    return m1data.StudentSet(
+        ids=[f"d{i}" for i in range(n)],
+        token_ids=ids,
+        speaker_ids=(ids > 0).astype("int8"),
+        cls_positions=cls,
+        n_utterances=np.full(n, 2, "int32"),
+    )
+
+
+def test_length_helpers():
+    data = _student_set([5, 32, 9, 17])
+    np.testing.assert_array_equal(train.row_lengths(data.token_ids), [5, 32, 9, 17])
+    assert [train.bucket_length(n, [8, 16, 24], 32) for n in (3, 8, 9, 25)] == [8, 8, 16, 32]
+    assert train.bucket_length(30, [64, 128], 32) == 32  # never wider than the arrays
+
+    lengths = np.array([7, 1, 9, 3, 5, 2, 8, 4, 6, 0])
+    rows = np.arange(10)
+    ev = train.length_batches(rows, lengths, 4)
+    assert [b.tolist() for b in ev] == [[9, 1, 5, 3], [7, 4, 8, 0], [6, 2]]
+    a = train.length_batches(rows, lengths, 2, np.random.default_rng(0), pool_batches=2)
+    b = train.length_batches(rows, lengths, 2, np.random.default_rng(0), pool_batches=2)
+    assert [x.tolist() for x in a] == [x.tolist() for x in b]  # deterministic per rng
+    assert sorted(np.concatenate(a).tolist()) == rows.tolist()  # every row exactly once
+    for batch in a:  # each batch comes from one sorted pool: lengths are adjacent in it
+        assert len(batch) == 2
+
+
+def test_bucketed_dataset_and_predictions_match_unbucketed():
+    lengths = [5, 30, 9, 17, 6, 12, 28, 3]
+    data = _student_set(lengths)
+    targets = m1data.Targets(
+        scores=np.tile(np.array([[0.2, 0.9]], "float32"), (8, 1)),
+        tags=np.ones((8, 2), "int8"),
+        labelled=np.ones(8, bool),
+    )
+    ds = train.StudentDataset(
+        data, targets, np.arange(8), 2, True, seed=0, buckets=[8, 16, 24], pool_batches=2
+    )
+    assert len(ds) == 4
+    widths, kept = [], []
+    for i in range(len(ds)):
+        x, y, sw = ds[i]
+        width = x["token_ids"].shape[1]
+        assert width in (8, 16, 24, 32) and x["speaker_ids"].shape == x["token_ids"].shape
+        assert y["importance"].shape == (2, 2) and sw["tags"].shape == (2, 2)
+        widths.append(width)
+        kept += train.row_lengths(x["token_ids"]).tolist()
+    assert min(widths) < 32  # some batches are cut ...
+    assert sorted(kept) == sorted(lengths)  # ... but only padding is removed
+
+    model = build_student(SMALL, use_tags=True)
+    rows = np.array([3, 0, 6, 1, 7])
+    plain = train.predict_utterances(model, data, rows, 2)
+    bucketed = train.predict_utterances(model, data, rows, 2, buckets=[8, 16, 24])
+    for p, q in zip(plain, bucketed, strict=True):
+        assert p["tags"] == q["tags"]
+        np.testing.assert_allclose(p["scores"], q["scores"], atol=1e-5)

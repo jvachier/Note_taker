@@ -54,6 +54,7 @@ def vllm_backend(model: str, cfg: dict[str, Any]) -> Generate:
         max_model_len=v["max_model_len"],
         gpu_memory_utilization=v["gpu_memory_utilization"],
         tensor_parallel_size=v["tensor_parallel_size"],
+        enable_prefix_caching=v["enable_prefix_caching"],
         seed=cfg["seed"],
     )
     tokenizer = llm.get_tokenizer()

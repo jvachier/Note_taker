@@ -45,6 +45,8 @@ training:
   epochs: 10
   max_steps: null
   mixed_precision: mixed_float16
+  buckets: [128, 256, 384, 512]  # not in PLAN, throughput only: batches of similar-length
+  pool_batches: 50               # dialogues (shuffled pools of 50 batches), cut to a bucket
   early_stopping:
     monitor: val_spearman
     mode: max

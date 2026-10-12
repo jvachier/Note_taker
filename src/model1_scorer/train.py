@@ -1,10 +1,11 @@
-"""Stage 7b: train a Model 1 student (A/B/C/D) for one or all seeds.
+"""Stage 7b: train a Model 1 student (A/B/C/D/E) for one or all seeds.
 
 Usage::
 
     uv run python -m src.model1_scorer.train --config configs/model1_student_A.yaml --all-seeds
 
-Students differ only by their config: targets (7B teacher, 1.5B teacher, oracle), whether the
+Students differ only by their config: targets (7B teacher, 1.5B teacher, oracle, or oracle
+importance + 7B tags for E), whether the
 tag head is trained, and the initialisation (MLM ``encoder.keras`` or random). Only dialogues
 with labels are used. Early stopping and checkpoint selection use ``val_spearman``: per-dialogue
 Spearman between predicted importance and the student's own validation targets.
@@ -302,8 +303,9 @@ def train_seed(cfg: dict[str, Any], seed: int, session_start: float | None = Non
         StudentSet.load(processed / "train"),
         StudentSet.load(processed / "validation"),
     )
-    train_t = load_targets(labels_dir, "train", train_data, source)
-    val_t = load_targets(labels_dir, "validation", val_data, source)
+    tag_dir = cfg["paths"].get("tag_labels_dir")  # Student E: tags from a teacher
+    train_t = load_targets(labels_dir, "train", train_data, source, tag_dir)
+    val_t = load_targets(labels_dir, "validation", val_data, source, tag_dir)
     train_rows, val_rows = np.flatnonzero(train_t.labelled), np.flatnonzero(val_t.labelled)
     spe, epochs, total = steps_for(len(train_rows), tr["batch_size"], tr["epochs"], tr["max_steps"])
     use_tags, buckets = cfg["targets"]["use_tags"], tr["buckets"]

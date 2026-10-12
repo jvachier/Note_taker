@@ -1,0 +1,9 @@
+# The image only needs the lockfile and the inference code; everything else stays out.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!app/
+!src/
+**/__pycache__
+**/*.pyc

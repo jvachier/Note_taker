@@ -182,10 +182,11 @@ Greedy selection per dialogue: repeatedly add the utterance that most increases 
 | B | 1.5B teacher scores + tags |
 | C | Oracle 0/1 labels (importance head only) |
 | D (ablation) | Same as A but **no MLM pretraining** (random init) |
+| E (added) | Importance from **oracle 0/1 labels** (as C) + tags from the **7B teacher** (as A). Added after A was found to copy the teacher's bias towards late, long utterances (correlation with position +0.43 / length +0.46 vs −0.16 / +0.06 for the oracle). |
 
 **Loss**
 - Importance: binary cross-entropy with soft targets + λ · listwise KL between softmax(student logits / T) and softmax(teacher scores / T) over the utterances of a dialogue. Start with λ = 1, T = 2.
-- Tags (A, B only): masked sparse categorical cross-entropy, weight 0.5.
+- Tags (A, B, D, E): masked sparse categorical cross-entropy, weight 0.5.
 - AdamW, lr 1e-4 (encoder) / 1e-3 (heads), warmup 10%, batch 16 dialogues, max 10 epochs, early stopping on validation Spearman.
 - 3 seeds per student; report mean ± std.
 
@@ -216,6 +217,7 @@ Greedy selection per dialogue: repeatedly add the utterance that most increases 
 | Student B | ~17M | | | | | | |
 | Student C | ~17M | | | | | | |
 | Student D | ~17M | | | | | | |
+| Student E | ~17M | | | | | | |
 
 ---
 

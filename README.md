@@ -51,3 +51,39 @@ for Model 1 build the local test arrays and run the full evaluation (BERTScore, 
 
 Configs live in `configs/`. A config can inherit from another with `base: <file>.yaml`;
 `src.config.load_config` returns the fully resolved dict.
+
+## Results report
+
+```bash
+uv run python -m src.eval.report    # -> results/report/index.html (interactive, offline)
+```
+
+Every figure comes with what it shows and a good / mixed / poor verdict computed from the
+numbers (thresholds in `configs/report.yaml`).
+
+## Release and demo app
+
+```bash
+uv run python -m src.publish.package   # best validation seed of each model -> release/<repo>/
+```
+
+Each `release/<repo>/` folder (`model.keras` without optimizer state, `tokenizer.json`,
+`config.json`) is what gets uploaded to the Hugging Face Hub, and what the demo app loads.
+
+Run the demo (Dash: punctuation restoration + dialogue notes) with Docker:
+
+```bash
+docker compose up --build                       # models from the Hugging Face Hub
+MODEL2_SOURCE=/models/punctuation-casing-en-7m \
+MODEL1_SOURCE=/models/dialogue-notes-scorer-17m \
+docker compose up --build                       # or the local ./release folders
+```
+
+then open http://localhost:8050. Without Docker: `uv run --extra app python -m app.main` (uses
+`./release` if present, else the Hub; override with `MODEL2_SOURCE` / `MODEL1_SOURCE`).
+
+## CI
+
+`.github/workflows/ci.yaml` runs `pre-commit run --all-files` (YAML/TOML checks, large-file
+guard, ruff, ruff format, pytest) on every pull request and push to `main`, and checks that the
+Docker image builds. Install the hooks locally with `uv run pre-commit install`.

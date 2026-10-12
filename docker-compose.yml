@@ -1,0 +1,24 @@
+# Demo app for both models: `docker compose up --build`, then open http://localhost:8050
+#
+# By default the models are downloaded from the Hugging Face Hub (cached in a volume).
+# To run local packages instead (`uv run python -m src.publish.package` writes ./release):
+#   MODEL2_SOURCE=/models/punctuation-casing-en-7m \
+#   MODEL1_SOURCE=/models/dialogue-notes-scorer-17m docker compose up --build
+services:
+  app:
+    build: .
+    image: dialogue-notes-demo:latest
+    ports:
+      - "${PORT:-8050}:8050"
+    environment:
+      MODEL2_SOURCE: ${MODEL2_SOURCE:-Jvachier/punctuation-casing-en-7m}
+      MODEL1_SOURCE: ${MODEL1_SOURCE:-Jvachier/dialogue-notes-scorer-17m}
+      MODEL_REVISION: ${MODEL_REVISION:-}   # Hub branch, tag or commit; empty = main
+      HF_TOKEN: ${HF_TOKEN:-}               # only needed for private repos
+    volumes:
+      - hf-cache:/cache/huggingface
+      - ./release:/models:ro
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

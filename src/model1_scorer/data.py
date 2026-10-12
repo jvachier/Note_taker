@@ -14,6 +14,7 @@ beyond ``data.max_utterances`` or beyond what fits in ``max_len`` are dropped an
 Targets (:func:`load_targets`) come from the label files of Stage 6 and are aligned to these
 rows: per utterance a score in [0, 1] (teacher score or oracle 0/1) and a tag index, ``-1``
 where there is no label. Dialogues without labels (teacher failure, train subset) are masked.
+Importance and tags can come from different sources (``paths.tag_labels_dir``, Student E).
 """
 
 from __future__ import annotations
@@ -110,8 +111,19 @@ class Targets:
     labelled: np.ndarray  # (N,) bool: the dialogue has labels
 
 
-def load_targets(labels_dir: str | Path, split: str, dataset: StudentSet, source: str) -> Targets:
-    """Read ``<labels_dir>/<split>.jsonl`` (teacher or oracle) and align it to ``dataset``."""
+def load_targets(
+    labels_dir: str | Path,
+    split: str,
+    dataset: StudentSet,
+    source: str,
+    tag_labels_dir: str | Path | None = None,
+) -> Targets:
+    """Read ``<labels_dir>/<split>.jsonl`` (teacher or oracle) and align it to ``dataset``.
+
+    With ``tag_labels_dir`` (a teacher's labels), the tags come from there instead: importance
+    from one source (e.g. the oracle) and tags from another (Student E). Dialogues the tag
+    teacher failed on keep their importance targets with masked tags.
+    """
     n, u = dataset.cls_positions.shape
     scores = np.full((n, u), IGNORE, dtype=np.float32)
     tags = np.full((n, u), IGNORE, dtype=np.int8)
@@ -132,6 +144,13 @@ def load_targets(labels_dir: str | Path, split: str, dataset: StudentSet, source
         labelled[i] = True
     if unknown:
         log.warning("%s/%s: %d labelled dialogues not in the arrays", labels_dir, split, unknown)
+    if tag_labels_dir is not None:
+        tags[:] = IGNORE
+        for record in read_jsonl(Path(tag_labels_dir) / f"{split}.jsonl"):
+            i = row.get(record["id"])
+            if i is not None:
+                k = int(dataset.n_utterances[i])
+                tags[i, :k] = [TAGS.index(t) for t in record["tags"][:k]]
     return Targets(scores, tags, labelled)
 
 

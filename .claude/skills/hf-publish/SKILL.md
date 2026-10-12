@@ -11,7 +11,7 @@ description: Package a trained Keras model (Model 2 cleanup or Model 1 utterance
 - The chosen checkpoint is the best on **validation**, and its test metrics are in the table.
 
 ## Repo
-- Hub repo: `Jvachier/<model-name>` (e.g. `dialogue-cleanup-7m`, `dialogue-notes-scorer-17m`).
+- Hub repo: `Jvachier/<model-name>` (e.g. `punctuation-casing-en-7m`, `dialogue-notes-scorer-17m`).
   Confirm the name with the user before creating it.
 - Login via `HF_TOKEN` environment variable or `huggingface-cli login`. Never write the token to a file in the repo.
 

@@ -11,6 +11,7 @@ students:                  # name -> checkpoint dir (latency and size use seed 0
   model1_student_B: checkpoints/model1_student_B
   model1_student_C: checkpoints/model1_student_C
   model1_student_D_noMLM: checkpoints/model1_student_D
+  model1_student_E: checkpoints/model1_student_E
 bertscore:
   enabled: true            # needs `uv sync --extra eval` (pulls PyTorch; evaluation only)
   model_type: roberta-large  # not in PLAN: bert_score's default for English

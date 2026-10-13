@@ -30,8 +30,8 @@ description: Create and run a training or evaluation experiment (Model 2, MLM pr
 - Run `python -m src.eval.aggregate --exp <exp_name>` to update:
   - `results/tables/model2.md` or `results/tables/model1.md`
   - each cell as `mean ± std` over seeds
-- Model 1 rows must include: params, ROUGE-1/2/L, BERTScore F1, retention vs 7B teacher,
-  Spearman vs 7B teacher, top-3 Jaccard, decision/action-item F1, CPU latency on M2.
+- Model 1 rows must include: params, ROUGE-1/2/L, BERTScore F1, retention vs the reference
+  teacher (v2: 14B), Spearman vs that teacher, top-3 Jaccard, decision/action-item F1, CPU latency on M2.
 - Model 2 rows: punctuation per-class F1 and macro-F1, casing accuracy and F1,
   on WikiText test and DialogSum test, at each noise level.
 

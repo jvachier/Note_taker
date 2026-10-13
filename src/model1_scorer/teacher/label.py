@@ -2,17 +2,23 @@
 
 Usage (Kaggle GPU, in the vLLM environment; never with JAX/Keras)::
 
-    python -m src.model1_scorer.teacher.label --config configs/teacher.yaml --teacher qwen7b
+    python -m src.model1_scorer.teacher.label --config configs/teacher.yaml --teacher qwen14b
 
 Per split, writes ``<output_dir>/<teacher>/<split>.jsonl`` (one validated dialogue per line:
-raw 0-10 scores, scores normalised to [0, 1], tags) and ``failed_<split>.jsonl`` (dialogues
-still invalid after the retry, with the reason), then ``stats.json`` with failure rates.
-Lines are appended as dialogues finish and dialogues already in either file are skipped, so a
-cut-off session resumes where it stopped.
+raw scores on the teacher scale, scores normalised to [0, 1], tags, number of valid samples)
+and ``failed_<split>.jsonl`` (dialogues still invalid after the retry, with the reason), then
+``stats.json`` with failure rates. Lines are appended as dialogues finish and dialogues already
+in either file are skipped, so a cut-off session resumes where it stopped.
 
-Backend: vLLM (greedy, ``temperature: 0``). If vLLM cannot be imported, the run falls back to
-``transformers`` + ``bitsandbytes`` 4-bit on the non-AWQ checkpoint and logs a warning; the
-backend used is recorded in ``stats.json``.
+Self-consistency: each dialogue is sampled ``generation.num_samples`` times at
+``generation.temperature``; the valid answers are merged (mean score, majority tag, see
+:func:`~src.model1_scorer.teacher.validate.combine_samples`). Only when no sample is valid, the
+first answer is retried once with a correction message, decoded greedily. With
+``use_reference: true`` the prompt includes the dialogue's reference summaries.
+
+Backend: vLLM. If vLLM cannot be imported, the run falls back to ``transformers`` +
+``bitsandbytes`` 4-bit on the non-AWQ checkpoint and logs a warning; the backend used is
+recorded in ``stats.json``.
 
 With ``train_subset: N`` only a fixed random subset of N train dialogues is labelled (the same
 for every teacher: it depends only on ``seed``); validation and test are always labelled in full.
@@ -34,17 +40,23 @@ import numpy as np
 from src.config import load_config
 from src.data.io import read_jsonl
 from src.model1_scorer.teacher.prompt import build_messages, retry_messages
-from src.model1_scorer.teacher.validate import InvalidAnswer, validate_answer
+from src.model1_scorer.teacher.validate import (
+    InvalidAnswer,
+    TeacherLabels,
+    combine_samples,
+    validate_answer,
+)
 
 log = logging.getLogger(__name__)
 
-# conversations -> answers (``None`` when a prompt cannot be run, e.g. too long)
-Generate = Callable[[list[list[dict[str, str]]]], list[str | None]]
+# (conversations, sample) -> per conversation its answers (``num_samples`` sampled answers if
+# ``sample`` else one greedy answer), or ``None`` when the prompt cannot be run (too long)
+Generate = Callable[[list[list[dict[str, str]]], bool], list[list[str] | None]]
 TOO_LONG = "prompt too long for the model context"
 
 
 def vllm_backend(model: str, cfg: dict[str, Any]) -> Generate:
-    """Greedy batched chat generation with vLLM."""
+    """Batched chat generation with vLLM (``n`` samples share the prompt's prefill)."""
     from vllm import LLM, SamplingParams
 
     v = cfg["vllm"]
@@ -58,36 +70,51 @@ def vllm_backend(model: str, cfg: dict[str, Any]) -> Generate:
         seed=cfg["seed"],
     )
     tokenizer = llm.get_tokenizer()
-    max_new = cfg["generation"]["max_new_tokens"]
-    params = SamplingParams(temperature=cfg["generation"]["temperature"], max_tokens=max_new)
+    gen = cfg["generation"]
+    max_new = gen["max_new_tokens"]
+    sampled = SamplingParams(
+        n=gen["num_samples"],
+        temperature=gen["temperature"],
+        top_p=gen["top_p"],
+        max_tokens=max_new,
+        seed=cfg["seed"],
+    )
+    greedy = SamplingParams(temperature=0.0, max_tokens=max_new)
 
-    def generate(conversations: list[list[dict[str, str]]]) -> list[str | None]:
+    def generate(conversations: list[list[dict[str, str]]], sample: bool) -> list[list[str] | None]:
         lengths = [
             len(tokenizer.apply_chat_template(c, add_generation_prompt=True, tokenize=True))
             for c in conversations
         ]
         runnable = [i for i, n in enumerate(lengths) if n + max_new <= v["max_model_len"]]
-        answers: list[str | None] = [None] * len(conversations)
+        answers: list[list[str] | None] = [None] * len(conversations)
         if runnable:
+            params = sampled if sample else greedy
             outputs = llm.chat([conversations[i] for i in runnable], params, use_tqdm=False)
             for i, out in zip(runnable, outputs, strict=True):
-                answers[i] = out.outputs[0].text
+                answers[i] = [o.text for o in out.outputs]
         return answers
 
     return generate
 
 
 def transformers_backend(model: str, cfg: dict[str, Any]) -> Generate:
-    """Fallback: greedy generation with ``transformers`` and a 4-bit ``bitsandbytes`` model."""
+    """Fallback: generation with ``transformers`` and a 4-bit ``bitsandbytes`` model."""
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     tokenizer = AutoTokenizer.from_pretrained(model, padding_side="left")
     quant = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype="float16")
     lm = AutoModelForCausalLM.from_pretrained(model, quantization_config=quant, device_map="auto")
-    batch = cfg["fallback"]["batch_size"]
+    batch, gen = cfg["fallback"]["batch_size"], cfg["generation"]
 
-    def generate(conversations: list[list[dict[str, str]]]) -> list[str | None]:
-        answers: list[str | None] = []
+    def generate(conversations: list[list[dict[str, str]]], sample: bool) -> list[list[str] | None]:
+        n = gen["num_samples"] if sample else 1
+        options = (
+            {"do_sample": True, "temperature": gen["temperature"], "top_p": gen["top_p"]}
+            if sample
+            else {"do_sample": False}
+        )
+        answers: list[list[str] | None] = []
         for i in range(0, len(conversations), batch):
             texts = [
                 tokenizer.apply_chat_template(c, add_generation_prompt=True, tokenize=False)
@@ -95,10 +122,12 @@ def transformers_backend(model: str, cfg: dict[str, Any]) -> Generate:
             ]
             enc = tokenizer(texts, return_tensors="pt", padding=True).to(lm.device)
             out = lm.generate(  # generate() runs without gradients
-                **enc, do_sample=False, max_new_tokens=cfg["generation"]["max_new_tokens"]
+                **enc, **options, num_return_sequences=n, max_new_tokens=gen["max_new_tokens"]
             )
-            new = out[:, enc["input_ids"].shape[1] :]
-            answers += tokenizer.batch_decode(new, skip_special_tokens=True)
+            texts = tokenizer.batch_decode(
+                out[:, enc["input_ids"].shape[1] :], skip_special_tokens=True
+            )
+            answers += [texts[j : j + n] for j in range(0, len(texts), n)]
         return answers
 
     return generate
@@ -139,10 +168,33 @@ def _append(path: Path, records: Sequence[dict[str, Any]]) -> None:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
-def _check(answer: str | None, n: int, cfg: dict[str, Any]):
+def _check(answer: str | None, n: int, cfg: dict[str, Any]) -> TeacherLabels:
     if answer is None:
         raise InvalidAnswer(TOO_LONG)
     return validate_answer(answer, n, cfg["score_range"], cfg["tags"])
+
+
+def _check_samples(answers: list[str] | None, n: int, cfg: dict[str, Any]) -> TeacherLabels:
+    """Merge the valid answers; if none is valid, raise the first answer's problem."""
+    if answers is None:
+        raise InvalidAnswer(TOO_LONG)
+    valid, first_error = [], None
+    for a in answers:
+        try:
+            valid.append(_check(a, n, cfg))
+        except InvalidAnswer as err:
+            first_error = first_error or err
+    if not valid:
+        raise first_error or InvalidAnswer("no answer")
+    return combine_samples(valid, cfg["score_range"])
+
+
+def build_dialogue_messages(record: dict[str, Any], cfg: dict[str, Any]) -> list[dict[str, str]]:
+    """Prompt for one DialogSum record (with its reference summaries if ``use_reference``)."""
+    summaries = record["summaries"] if cfg["use_reference"] else None
+    return build_messages(
+        record["speakers"], record["utterances"], cfg["score_range"], cfg["tags"], summaries
+    )
 
 
 def label_dialogues(
@@ -152,7 +204,7 @@ def label_dialogues(
     failed_path: Path,
     cfg: dict[str, Any],
 ) -> dict[str, int]:
-    """Label ``records`` not yet done, in chunks; one retry with a correction message."""
+    """Label ``records`` not yet done, in chunks; one greedy retry with a correction message."""
     done = done_ids(labels_path, failed_path)
     todo = [r for r in records if r["id"] not in done]
     counts = {
@@ -161,30 +213,31 @@ def label_dialogues(
         "retried": 0,
         "failed": 0,
         "too_long": 0,
+        "samples_generated": 0,
+        "samples_valid": 0,
     }
     chunk = cfg["batch_dialogues"]
     for start in range(0, len(todo), chunk):
         batch = todo[start : start + chunk]
-        convs = [
-            build_messages(r["speakers"], r["utterances"], cfg["score_range"], cfg["tags"])
-            for r in batch
-        ]
-        answers = generate(convs)
+        convs = [build_dialogue_messages(r, cfg) for r in batch]
+        answers = generate(convs, True)
         results: list[Any] = [None] * len(batch)
         errors: dict[int, str] = {}
         for i, (r, a) in enumerate(zip(batch, answers, strict=True)):
+            counts["samples_generated"] += len(a or [])
             try:
-                results[i] = _check(a, len(r["utterances"]), cfg)
+                results[i] = _check_samples(a, len(r["utterances"]), cfg)
+                counts["samples_valid"] += results[i].samples
             except InvalidAnswer as err:
                 errors[i] = str(err)
-        attempts = {i: [answers[i]] for i in errors}
+        attempts = {i: list(answers[i] or [None]) for i in errors}
         retry = [i for i in errors if errors[i] != TOO_LONG] if cfg["max_retries"] else []
         if retry:
             counts["retried"] += len(retry)
             convs2 = [
                 retry_messages(
                     convs[i],
-                    answers[i],
+                    answers[i][0],
                     errors[i],
                     len(batch[i]["utterances"]),
                     cfg["score_range"],
@@ -192,13 +245,13 @@ def label_dialogues(
                 )
                 for i in retry
             ]
-            for i, a in zip(retry, generate(convs2), strict=True):
+            for i, a in zip(retry, generate(convs2, False), strict=True):
                 try:
-                    results[i] = _check(a, len(batch[i]["utterances"]), cfg)
+                    results[i] = _check_samples(a, len(batch[i]["utterances"]), cfg)
                     del errors[i]
                 except InvalidAnswer as err:
                     errors[i] = f"{errors[i]}; retry: {err}"
-                    attempts[i].append(a)
+                    attempts[i] += a or [None]
         good, bad = [], []
         for i, r in enumerate(batch):
             if i in errors:
@@ -213,6 +266,7 @@ def label_dialogues(
                         "raw_scores": lab.raw_scores,
                         "scores": lab.scores,
                         "tags": lab.tags,
+                        "samples": lab.samples,
                         "retried": i in retry,
                     }
                 )

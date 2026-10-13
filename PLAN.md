@@ -164,39 +164,47 @@ Training mix: WikiText-103 windows + DialogSum train dialogues oversampled ×5 (
 - Importance: `Dense(1)` → sigmoid, score in [0, 1].
 - Tag: `Dense(4)`: `none`, `key_point`, `decision`, `action_item`.
 
-### 5.3 Teacher labelling (Kaggle GPU)
-- Teachers: **Qwen2.5-7B-Instruct-AWQ** and **Qwen2.5-1.5B-Instruct** (both Apache 2.0). Greedy decoding (temperature 0).
-- Prompt: numbered utterances; ask for JSON only:
-  `[{"id": 1, "score": 0-10, "tag": "none|key_point|decision|action_item"}, …]`
-- Validate: valid JSON, every ID present once, score in range, tag in set. One retry, then drop. Log failure rate per teacher.
+### 5.3 Teacher labelling (Kaggle GPU) — v2 (approved 2026-10-13)
+- Teachers: **Qwen2.5-14B-Instruct-AWQ** (strong, reference teacher) and **Qwen2.5-1.5B-Instruct** (weak-teacher baseline), both Apache 2.0.
+- Prompt: numbered utterances **and the dialogue's reference summary** (all 3 on test); the teacher rates how much each utterance contributes to it. JSON only, format shown **without example values**:
+  `[{"id": <int>, "score": <int>, "tag": <string>}, …]`
+- Score: anchored **0-3** scale (3 = main fact / problem / decision / plan, 2 = useful detail, 1 = context, 0 = greeting / filler / bare yes-no). Tags with stricter rules (`decision` only when explicitly agreed).
+- **Self-consistency**: 3 samples per dialogue (T = 0.7, top-p 0.95); each validated (valid JSON, every ID once, integer score in range, tag in set); valid samples merged (mean score, majority tag, ties to the rarer tag). If no sample is valid: one greedy retry with the reason, then drop. Log failure rate and valid-sample rate per teacher.
 - Normalise score to [0, 1].
-- Label the full train/val/test splits if throughput allows, else a fixed subset (start with 5,000 train dialogues), identical across teachers.
+- Label the full train/val/test splits if throughput allows, else a fixed subset (start with 5,000 train dialogues), identical across teachers. The teachers stop at 60% of a session and resume in the next one.
+- Because the teacher sees the reference, its test row is a **reference-aware upper bound** (like the oracle), not a deployable system. Students never see references.
+
+**Why v2.** v1 (7B + 1.5B, greedy, no reference, 0-10 scale with an example `"score": 3` in the format line) gave weak labels: the 1.5B teacher answered 3 for 98% of utterances (the example value), so its top-3 was Lead-3 through position tie-breaking; the 7B teacher's top-3 scored below Lead-3 on ROUGE-1 (0.203 vs 0.219), favoured late utterances (Spearman with position +0.35, the oracle favours early ones) and put only 40% of oracle utterances in its top-3. Student A reproduced the 7B teacher almost exactly (retention 0.997), so distillation worked and the labels were the bottleneck.
 
 ### 5.4 Oracle labels (no LLM)
 Greedy selection per dialogue: repeatedly add the utterance that most increases ROUGE-1 F1 + ROUGE-2 F1 against the reference summary; stop when no gain or 3 utterances. Selected = 1, others = 0. No tags.
 
+**Soft labels (v2)**: per utterance, ROUGE-1 F1 + ROUGE-2 F1 of that utterance alone against the references, divided by the dialogue's best single utterance → a continuous target in [0, 1]. v1's 0/1 labels (~2 positives per dialogue) gave the listwise loss little to rank.
+
 ### 5.5 Students (identical architecture, init from the MLM checkpoint)
-| Student | Targets |
+| Student | Targets (v2) |
 |---|---|
-| A | 7B teacher scores + tags |
+| A | 14B teacher scores + tags |
 | B | 1.5B teacher scores + tags |
-| C | Oracle 0/1 labels (importance head only) |
+| C | **Soft** oracle labels (importance head only) |
 | D (ablation) | Same as A but **no MLM pretraining** (random init) |
-| E (added) | Importance from **oracle 0/1 labels** (as C) + tags from the **7B teacher** (as A). Added after A was found to copy the teacher's bias towards late, long utterances (correlation with position +0.43 / length +0.46 vs −0.16 / +0.06 for the oracle). |
+| E (added) | Importance = **0.5 × 14B teacher score + 0.5 × soft oracle label**; tags from the 14B teacher. |
+
+v1 targets: A = 7B teacher, C = oracle 0/1, E = oracle 0/1 importance + 7B tags (E was added after A was found to copy the 7B teacher's bias towards late, long utterances).
 
 **Loss**
 - Importance: binary cross-entropy with soft targets + λ · listwise KL between softmax(student logits / T) and softmax(teacher scores / T) over the utterances of a dialogue. Start with λ = 1, T = 2.
-- Tags (A, B, D, E): masked sparse categorical cross-entropy, weight 0.5.
-- AdamW, lr 1e-4 (encoder) / 1e-3 (heads), warmup 10%, batch 16 dialogues, max 10 epochs, early stopping on validation Spearman.
+- Tags (A, B, D, E): masked sparse categorical cross-entropy, weight 0.5, with **inverse-sqrt-frequency class weights** from the train tags (v2: `decision` is ~3% of utterances; v1 decision F1 was 0.04–0.12).
+- AdamW, lr 1e-4 (encoder) / 1e-3 (heads), warmup 10%, batch 16 dialogues, max 10 epochs, early stopping and checkpoint selection on **validation loss**, patience 2 (v2; v1 used validation Spearman, patience 3, which kept training for 2–4 epochs after the validation loss started rising). Validation Spearman is still logged.
 - 3 seeds per student; report mean ± std.
 
-**Inference rule (same for every system)**: select the top-3 utterances by score, output them in dialogue order, grouped by predicted tag.
+**Inference rule (same for every system)**: select the top-3 utterances by score, output them in dialogue order, grouped by predicted tag. In the evaluation, score ties are broken by seeded random keys per dialogue (v2; v1 broke them by position, which turned a teacher with many tied scores into Lead-3).
 
 ### 5.6 Evaluation (DialogSum test)
 - Summary quality vs the 3 human references: ROUGE-1/2/L, BERTScore F1.
 - **Retention** = student score / teacher score (target ≥ 0.90), where the teacher row is the teacher's own top-3 selection.
 - Agreement with teacher: per-dialogue Spearman (averaged), top-3 Jaccard overlap.
-- Tags: precision/recall/F1 for `decision` and `action_item` vs the 7B teacher's tags (state clearly this is agreement with the teacher, not ground truth).
+- Tags: precision/recall/F1 for `decision` and `action_item` vs the reference (v2: 14B, v1: 7B) teacher's tags (state clearly this is agreement with the teacher, not ground truth).
 - Efficiency: parameter count, file size, CPU latency per dialogue (M2), compared with the teachers.
 - Reference rows: oracle selection (upper bound for extraction), lead-3 (first three utterances).
 
@@ -206,18 +214,31 @@ Greedy selection per dialogue: repeatedly add the utterance that most increases 
 
 **Model 2**: rule baseline vs model, both test sets, all noise levels.
 
-**Model 1**:
-| System | Params | ROUGE-1/2/L | BERTScore | Retention | Spearman vs 7B | Decision/Action F1 | CPU latency |
+**Model 1 (v2, to fill)**:
+| System | Params | ROUGE-1/2/L | BERTScore | Retention | Spearman vs 14B | Decision/Action F1 | CPU latency |
 |---|---|---|---|---|---|---|---|
 | Lead-3 | – | | | | | | |
 | Oracle | – | | | | | | |
-| Teacher 7B | 7B | | | 1.00 | 1.00 | | |
-| Teacher 1.5B | 1.5B | | | | | | |
+| Teacher 14B (sees reference) | 14B | | | 1.00 | 1.00 | | |
+| Teacher 1.5B (sees reference) | 1.5B | | | | | | |
 | Student A | ~17M | | | | | | |
 | Student B | ~17M | | | | | | |
 | Student C | ~17M | | | | | | |
 | Student D | ~17M | | | | | | |
 | Student E | ~17M | | | | | | |
+
+**Model 1 v1 results** (Kaggle run of 2026-10-13: 7B / 1.5B teachers, v1 prompt; 498 test dialogues; students mean ± std over 3 seeds; `configs/model1_eval_v1.yaml`):
+| System | Params | ROUGE-1 / 2 / L | BERTScore | Retention | Spearman vs 7B | Decision / Action F1 | CPU latency |
+|---|---|---|---|---|---|---|---|
+| Lead-3 | – | 0.219 / 0.069 / 0.170 | 0.862 | 1.107 | −0.359 | – | – |
+| Oracle | – | 0.338 / 0.150 / 0.271 | 0.882 | 1.830 | −0.017 | – | – |
+| Teacher 7B | 7B | 0.203 / 0.063 / 0.149 | 0.860 | 1.000 | 1.000 | 1.000 / 1.000 | 298 ms (GPU, batched) |
+| Teacher 1.5B | 1.5B | 0.217 / 0.069 / 0.166 | 0.862 | 1.089 | 0.639 | 0.076 / 0.179 | 114 ms (GPU, batched) |
+| Student A | 17.0M | 0.202 / 0.063 / 0.148 | 0.859 | 0.997 ± 0.007 | 0.670 ± 0.007 | 0.124 / 0.457 | 42.9 ms |
+| Student B | 17.0M | 0.201 / 0.061 / 0.150 | 0.859 | 0.993 ± 0.021 | 0.415 ± 0.061 | 0.007 / 0.062 | 43.5 ms |
+| Student C | 17.0M | 0.246 / 0.088 / 0.190 | 0.867 | 1.264 ± 0.016 | 0.007 ± 0.056 | – | 43.3 ms |
+| Student D | 17.0M | 0.200 / 0.061 / 0.148 | 0.859 | 0.987 ± 0.014 | 0.569 ± 0.004 | 0.048 / 0.241 | 44.1 ms |
+| Student E | 17.0M | 0.245 / 0.089 / 0.176 | 0.866 | 1.230 ± 0.008 | 0.045 ± 0.031 | 0.039 / 0.440 | 43.8 ms |
 
 ---
 
@@ -239,5 +260,6 @@ Greedy selection per dialogue: repeatedly add the utterance that most increases 
 4. Model 2: example builder → training on Kaggle → evaluation.
 5. Model 1: MLM pretraining on Kaggle.
 6. Teacher labelling (7B, 1.5B) on Kaggle + oracle labels.
-7. Students A–D, 3 seeds each → evaluation → results tables.
+7. Students A–D, 3 seeds each → evaluation → results tables. (Done: v1, plus Student E.)
+7b. v2: teacher labelling (14B, 1.5B; reference, 0-3 scale, 3 samples) + soft oracle → students A–E, 3 seeds each → evaluation → results tables.
 8. Publish both models to Hugging Face: `.keras` file, `tokenizer.json`, config, model card (data, licence, method, metrics, limitations, usage snippet).

@@ -68,5 +68,17 @@ def test_main_writes_labels(tmp_path, tiny_assets):
     raw = list(read_jsonl(tiny_assets["raw"] / "dialogsum" / "validation.jsonl"))
     assert [r["id"] for r in rows] == [r["id"] for r in raw]
     assert all(len(r["labels"]) == 3 and sum(r["labels"]) == len(r["selected"]) for r in rows)
+    assert all(len(r["soft"]) == 3 and all(0 <= x <= 1 for x in r["soft"]) for r in rows)
+    assert all(r["soft"][r["selected"][0]] > 0 for r in rows if r["selected"])
     stats = json.loads((tmp_path / "oracle" / "stats.json").read_text())
     assert stats["splits"]["validation"]["dialogues"] == len(rows)
+
+
+def test_soft_labels_are_relative_single_utterance_scores():
+    utts = ["Hello there.", "We will ship the order on Monday.", "The order ships Monday."]
+    obj = oracle.Objective(utts, ["They will ship the order on Monday."], ["rouge1"], TOK)
+    soft = oracle.soft_labels(obj, 3)
+    assert soft[1] == 1.0 and soft[0] == 0.0 and 0 < soft[2] < 1
+    assert soft[2] == pytest.approx(round(obj([2]) / obj([1]), 4))
+    none = oracle.Objective(["abc"], ["xyz"], ["rouge1"], TOK)
+    assert oracle.soft_labels(none, 1) == [0.0]

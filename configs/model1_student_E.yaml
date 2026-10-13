@@ -1,13 +1,16 @@
 base: model1_student_A.yaml
 name: model1_student_E
 description: >-
-  Student E, importance from oracle 0/1 labels (like C) and tags from the Qwen2.5-7B teacher
-  (like A), MLM init. Not in the original PLAN: added because A reproduces the teacher's
-  late/long-utterance bias (see results/report).
+  Student E, importance = 0.5 x Qwen2.5-14B teacher score + 0.5 x soft oracle label, tags from
+  the 14B teacher, MLM init. Added after v1 (A copied the teacher's late/long-utterance bias,
+  C had no tags).
 paths:
-  labels_dir: data/labels/oracle          # importance targets
-  tag_labels_dir: data/labels/qwen7b      # tag targets
+  labels_dir: data/labels/qwen14b         # teacher scores + tags
   output_dir: checkpoints/model1_student_E
 targets:
-  source: oracle
+  source: qwen14b
   use_tags: true
+  blend:                                  # importance = (1 - weight) * teacher + weight * oracle
+    labels_dir: data/labels/oracle
+    source: oracle_soft
+    weight: 0.5

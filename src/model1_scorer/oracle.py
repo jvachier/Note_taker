@@ -9,10 +9,14 @@ selection (selected utterances in dialogue order) against the reference summary;
 utterance gives a gain or ``max_utterances`` are selected. Selected = 1, others = 0, no tags.
 With several references (test split) the objective is the mean over references.
 
+Soft labels (v2, ``soft``): per utterance, the objective of that utterance alone divided by the
+dialogue's best single-utterance objective, so a continuous target in [0, 1] (1 = the utterance
+the greedy oracle picks first; all 0 when no utterance overlaps the reference).
+
 ROUGE-N F1 is computed here from n-gram counts on ``rouge_score``'s own tokenizer (identical to
 ``RougeScorer``, checked in the tests) so each utterance is tokenised once.
 
-Writes ``<output_dir>/<split>.jsonl`` (``labels``, ``selected``, ``objective``) and
+Writes ``<output_dir>/<split>.jsonl`` (``labels``, ``soft``, ``selected``, ``objective``) and
 ``stats.json``.
 """
 
@@ -91,6 +95,13 @@ def greedy_oracle(
     return sorted(selected), best
 
 
+def soft_labels(objective: Objective, n_utterances: int) -> list[float]:
+    """Single-utterance objective of each utterance, divided by the dialogue maximum."""
+    single = [objective([i]) for i in range(n_utterances)]
+    top = max(single, default=0.0)
+    return [round(s / top, 4) if top > 0 else 0.0 for s in single]
+
+
 def label_record(record: dict[str, Any], cfg: dict[str, Any], tokenizer: DefaultTokenizer):
     """Oracle labels for one dialogue record."""
     objective = Objective(record["utterances"], record["summaries"], cfg["rouge_types"], tokenizer)
@@ -100,6 +111,7 @@ def label_record(record: dict[str, Any], cfg: dict[str, Any], tokenizer: Default
     return {
         "id": record["id"],
         "labels": labels,
+        "soft": soft_labels(objective, n),
         "selected": selected,
         "objective": round(score, 6),
     }

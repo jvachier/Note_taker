@@ -50,7 +50,8 @@ cut off and resumed.
   GPUs, one teacher per GPU in parallel (`CUDA_VISIBLE_DEVICES`). The training kernel never
   imports vLLM or PyTorch. In smoke mode a deterministic fake teacher replaces Qwen.
 - A labelling deadline leaves time for the other phases of the session.
-- Model: `Qwen/Qwen2.5-7B-Instruct-AWQ` or `Qwen/Qwen2.5-1.5B-Instruct`, temperature 0.
+- Model: `Qwen/Qwen2.5-14B-Instruct-AWQ` or `Qwen/Qwen2.5-1.5B-Instruct` (v2: reference summary in
+  the prompt, 0-3 scale, 3 samples at temperature 0.7 merged per dialogue; greedy retry).
 - Write labels incrementally (JSONL, one dialogue per line) and skip dialogues already labelled,
   so a cut-off session resumes where it stopped.
 - If vLLM fails to install, fall back to `transformers` + `bitsandbytes` 4-bit and say so.

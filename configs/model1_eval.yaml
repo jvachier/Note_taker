@@ -1,11 +1,11 @@
 name: model1_eval
 description: Model 1 evaluation on DialogSum test - every system, same inference rule.
-seed: 0
+seed: 0                    # also seeds the top-k tie-break keys
 top_k: 3
 use_stemmer: true          # same ROUGE settings as the oracle
-reference_teacher: qwen7b  # PLAN: retention, agreement and tag F1 against the 7B teacher
-teachers: [qwen7b, qwen1_5b]
-teacher_params: {qwen7b: 7B, qwen1_5b: 1.5B}
+reference_teacher: qwen14b  # PLAN: retention, agreement and tag F1 against the strong teacher
+teachers: [qwen14b, qwen1_5b]
+teacher_params: {qwen14b: 14B, qwen1_5b: 1.5B}
 students:                  # name -> checkpoint dir (latency and size use seed 0)
   model1_student_A: checkpoints/model1_student_A
   model1_student_B: checkpoints/model1_student_B

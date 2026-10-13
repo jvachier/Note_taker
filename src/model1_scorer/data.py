@@ -12,9 +12,10 @@ Dialogues are encoded with :func:`~src.model1_scorer.dialogue.encode_dialogue`; 
 beyond ``data.max_utterances`` or beyond what fits in ``max_len`` are dropped and counted.
 
 Targets (:func:`load_targets`) come from the label files of Stage 6 and are aligned to these
-rows: per utterance a score in [0, 1] (teacher score or oracle 0/1) and a tag index, ``-1``
-where there is no label. Dialogues without labels (teacher failure, train subset) are masked.
-Importance and tags can come from different sources (``paths.tag_labels_dir``, Student E).
+rows: per utterance a score in [0, 1] (teacher score, oracle 0/1 or soft oracle) and a tag
+index, ``-1`` where there is no label. Dialogues without labels (teacher failure, train subset)
+are masked. Tags can come from another source (``paths.tag_labels_dir``) and importance can be
+a blend of two sources (``targets.blend``, Student E).
 """
 
 from __future__ import annotations
@@ -111,19 +112,8 @@ class Targets:
     labelled: np.ndarray  # (N,) bool: the dialogue has labels
 
 
-def load_targets(
-    labels_dir: str | Path,
-    split: str,
-    dataset: StudentSet,
-    source: str,
-    tag_labels_dir: str | Path | None = None,
-) -> Targets:
-    """Read ``<labels_dir>/<split>.jsonl`` (teacher or oracle) and align it to ``dataset``.
-
-    With ``tag_labels_dir`` (a teacher's labels), the tags come from there instead: importance
-    from one source (e.g. the oracle) and tags from another (Student E). Dialogues the tag
-    teacher failed on keep their importance targets with masked tags.
-    """
+def _read_labels(labels_dir: str | Path, split: str, dataset: StudentSet, source: str) -> Targets:
+    """One label source aligned to ``dataset``: teacher scores + tags, oracle 0/1 or soft."""
     n, u = dataset.cls_positions.shape
     scores = np.full((n, u), IGNORE, dtype=np.float32)
     tags = np.full((n, u), IGNORE, dtype=np.int8)
@@ -138,20 +128,56 @@ def load_targets(
         k = int(dataset.n_utterances[i])
         if source == "oracle":
             scores[i, :k] = record["labels"][:k]
+        elif source == "oracle_soft":
+            scores[i, :k] = record["soft"][:k]
         else:
             scores[i, :k] = record["scores"][:k]
             tags[i, :k] = [TAGS.index(t) for t in record["tags"][:k]]
         labelled[i] = True
     if unknown:
         log.warning("%s/%s: %d labelled dialogues not in the arrays", labels_dir, split, unknown)
-    if tag_labels_dir is not None:
-        tags[:] = IGNORE
-        for record in read_jsonl(Path(tag_labels_dir) / f"{split}.jsonl"):
-            i = row.get(record["id"])
-            if i is not None:
-                k = int(dataset.n_utterances[i])
-                tags[i, :k] = [TAGS.index(t) for t in record["tags"][:k]]
     return Targets(scores, tags, labelled)
+
+
+def load_targets(
+    labels_dir: str | Path,
+    split: str,
+    dataset: StudentSet,
+    source: str,
+    tag_labels_dir: str | Path | None = None,
+    blend: dict[str, Any] | None = None,
+) -> Targets:
+    """Read ``<labels_dir>/<split>.jsonl`` and align it to ``dataset``.
+
+    ``source`` is a teacher name (scores + tags), ``oracle`` (0/1) or ``oracle_soft`` (soft
+    single-utterance labels). With ``tag_labels_dir`` (a teacher's labels), the tags come from
+    there instead; dialogues the tag teacher failed on keep their importance with masked tags.
+    With ``blend`` (``{"labels_dir", "source", "weight"}``) the importance target is
+    ``(1 - weight) * main + weight * blend source``; only dialogues labelled by both are used
+    (Student E: 7B/14B teacher scores blended with the soft oracle).
+    """
+    targets = _read_labels(labels_dir, split, dataset, source)
+    if tag_labels_dir is not None:
+        targets.tags[:] = _read_labels(tag_labels_dir, split, dataset, "teacher").tags
+    if blend is not None:
+        other = _read_labels(blend["labels_dir"], split, dataset, blend["source"])
+        w = float(blend["weight"])
+        both = targets.labelled & other.labelled
+        valid = (targets.scores >= 0) & (other.scores >= 0)
+        mixed = (1.0 - w) * targets.scores + w * other.scores
+        targets.scores[:] = np.where(valid & both[:, None], mixed, IGNORE)
+        dropped = int(targets.labelled.sum() - both.sum())
+        if dropped:
+            log.warning("%s: %d dialogues lack the blend source and are masked", split, dropped)
+        targets.labelled[:] = both
+        targets.tags[~both] = IGNORE
+    return targets
+
+
+def tag_counts(targets: Targets, rows: np.ndarray) -> list[int]:
+    """Count of each tag in :data:`TAGS` order over the labelled utterances of ``rows``."""
+    tags = np.asarray(targets.tags[rows]).ravel()
+    return [int((tags == k).sum()) for k in range(len(TAGS))]
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -497,14 +497,17 @@ def build_sections(cfg: dict[str, Any]) -> list[Section]:
         return sections
     res = load_model1(eval_cfg)
     main = m1["main_student"]
+    sizes = eval_cfg["teacher_params"]
+    strong = sizes[eval_cfg["reference_teacher"]]
+    weak = next((v for t, v in sizes.items() if t != eval_cfg["reference_teacher"]), "small")
     hists = {n: seed_histories(results / n) for n in res.students}
     add(
         "m1-training",
         "Model 1",
         "Student training",
         "Validation agreement (Spearman) of each student with its own targets, per epoch, "
-        "averaged over seeds. A: 7B teacher; B: 1.5B teacher; C: oracle labels; D: like A but "
-        "without MLM pretraining.",
+        f"averaged over seeds. A: {strong} teacher; B: {weak} teacher; C: oracle labels; D: like "
+        "A but without MLM pretraining; E: oracle importance with teacher tags.",
         lambda: student_training_verdict(hists, th),
         lambda: F.student_training(hists),
     )
@@ -522,10 +525,10 @@ def build_sections(cfg: dict[str, Any]) -> list[Section]:
     add(
         "m1-agreement",
         "Model 1",
-        "Agreement with the 7B teacher",
-        "How closely each system reproduces the 7B teacher. Retention = its ROUGE divided by "
-        "the teacher's. Spearman = how similarly it ranks the utterances of a dialogue (1 = "
-        "same order, 0 = unrelated). Top-3 overlap = shared picks (Jaccard).",
+        f"Agreement with the {strong} teacher",
+        f"How closely each system reproduces the {strong} teacher. Retention = its ROUGE "
+        "divided by the teacher's. Spearman = how similarly it ranks the utterances of a "
+        "dialogue (1 = same order, 0 = unrelated). Top-3 overlap = shared picks (Jaccard).",
         lambda: agreement_verdict(res, main, m1["ablation"], th),
         lambda: F.model1_agreement(res, th["retention_target"]),
     )
@@ -543,7 +546,7 @@ def build_sections(cfg: dict[str, Any]) -> list[Section]:
         "Model 1",
         "Decision and action-item tags",
         "Every utterance also gets a tag (none / key point / decision / action item). F1 here "
-        "measures agreement with the 7B teacher's tags; there are no human tags.",
+        f"measures agreement with the {strong} teacher's tags; there are no human tags.",
         lambda: tags_verdict(res, main, th),
         lambda: F.model1_tags(res),
     )

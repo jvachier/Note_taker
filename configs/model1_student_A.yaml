@@ -1,12 +1,12 @@
 name: model1_student_A
-description: Student A, distilled from the Qwen2.5-7B teacher (scores + tags), MLM init.
+description: Student A, distilled from the Qwen2.5-14B teacher (v2 labels, scores + tags), MLM init.
 seeds: [0, 1, 2]
 max_hours: 10              # not in PLAN
 paths:
   raw_dir: data/raw
   tokenizer_dir: data/tokenizer
   processed_dir: data/processed/model1
-  labels_dir: data/labels/qwen7b
+  labels_dir: data/labels/qwen14b
   init_checkpoint: checkpoints/mlm/encoder.keras
   output_dir: checkpoints/model1_student_A
   results_dir: results
@@ -14,7 +14,7 @@ data:
   max_utterances: 80       # not in PLAN: utterance slots per dialogue (DialogSum max is 65)
   max_dialogues: null      # cap per split (smoke runs only)
 targets:
-  source: qwen7b
+  source: qwen14b
   use_tags: true
 init: mlm                  # mlm | random
 model:
@@ -32,7 +32,8 @@ loss:
   listwise_lambda: 1.0
   temperature: 2.0
   tag_weight: 0.5
-  score_scale: 10          # not in PLAN: listwise targets on the teacher's 0-10 scale (see losses.py)
+  score_scale: 10          # not in PLAN: sharpness of the listwise targets in [0, 1] (see losses.py)
+  tag_class_weights: inverse_sqrt  # v2: decision / action_item are rare (null = uniform)
 optimizer:
   name: adamw
   lr_encoder: 1.0e-4
@@ -47,9 +48,9 @@ training:
   mixed_precision: mixed_float16
   buckets: [128, 256, 384, 512]  # not in PLAN, throughput only: batches of similar-length
   pool_batches: 50               # dialogues (shuffled pools of 50 batches), cut to a bucket
-  early_stopping:
-    monitor: val_spearman
-    mode: max
-    patience: 3            # not in PLAN
+  early_stopping:          # v2: val_loss (v1 val_spearman kept training while val_loss rose)
+    monitor: val_loss
+    mode: min
+    patience: 2            # not in PLAN
 inference:
   top_k: 3

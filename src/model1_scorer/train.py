@@ -4,11 +4,12 @@ Usage::
 
     uv run python -m src.model1_scorer.train --config configs/model1_student_A.yaml --all-seeds
 
-Students differ only by their config: targets (7B teacher, 1.5B teacher, oracle, or oracle
-importance + 7B tags for E), whether the
-tag head is trained, and the initialisation (MLM ``encoder.keras`` or random). Only dialogues
-with labels are used. Early stopping and checkpoint selection use ``val_spearman``: per-dialogue
-Spearman between predicted importance and the student's own validation targets.
+Students differ only by their config: targets (strong teacher, weak teacher, soft oracle, or a
+blend of teacher and soft oracle for E), whether the tag head is trained (with optional
+inverse-sqrt-frequency tag class weights), and the initialisation (MLM ``encoder.keras`` or
+random). Only dialogues with labels are used. Early stopping and checkpoint selection use the
+config's monitor (v2: ``val_loss``); ``val_spearman`` (per-dialogue Spearman between predicted
+importance and the student's own validation targets) is logged every epoch.
 
 Per seed:
     ``<paths.output_dir>/seed_<n>/``          ``best.keras``, ``backup/`` (while running)
@@ -36,8 +37,13 @@ import numpy as np
 from src.config import load_config
 from src.data.io import write_jsonl
 from src.eval.metrics import mean_spearman
-from src.layers.losses import label_weights, masked_sparse_ce, safe_labels
-from src.model1_scorer.data import TAGS, StudentSet, Targets, load_targets
+from src.layers.losses import (
+    inverse_sqrt_frequency_weights,
+    label_weights,
+    masked_sparse_ce,
+    safe_labels,
+)
+from src.model1_scorer.data import TAGS, StudentSet, Targets, load_targets, tag_counts
 from src.model1_scorer.losses import ImportanceLoss
 from src.model1_scorer.model import build_student, load_encoder_weights
 from src.seed import set_seed
@@ -126,6 +132,7 @@ class StudentDataset(keras.utils.PyDataset):
     ``(seed, epoch)`` (epoch set by :class:`~src.training.SyncEpoch`). With ``buckets``, each
     batch holds dialogues of similar length (:func:`length_batches`) and its token arrays are
     cut to the smallest bucket that fits them (throughput only: the cut is padding).
+    ``tag_class_weights`` (one per tag) scale the tag loss per utterance.
     """
 
     def __init__(
@@ -141,9 +148,11 @@ class StudentDataset(keras.utils.PyDataset):
         max_batches: int | None = None,
         buckets: Sequence[int] | None = None,
         pool_batches: int = 50,
+        tag_class_weights: Sequence[float] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
+        self.tag_class_weights = tag_class_weights
         self.data, self.targets, self.rows = data, targets, np.asarray(rows)
         self.batch_size, self.use_tags, self.shuffle, self.seed = (
             batch_size,
@@ -195,7 +204,8 @@ class StudentDataset(keras.utils.PyDataset):
         sw = {"importance": np.ones(len(rows), dtype=np.float32)}
         if self.use_tags:
             tags = self.targets.tags[rows]
-            y["tags"], sw["tags"] = safe_labels(tags), label_weights(tags)
+            y["tags"] = safe_labels(tags)
+            sw["tags"] = label_weights(tags, self.tag_class_weights)
         for weights in sw.values():
             weights[n_real:] = 0.0  # padding rows of a partial last batch do not count
         return model_inputs(self.data, rows, length), y, sw
@@ -264,6 +274,18 @@ class ValidationSpearman(keras.callbacks.Callback):
             logs["val_spearman"] = value
 
 
+def tag_class_weights(
+    cfg: dict[str, Any], targets: Targets, rows: np.ndarray
+) -> list[float] | None:
+    """Tag loss weights from the config: ``inverse_sqrt`` of the train tag frequencies, or none."""
+    mode = cfg["loss"].get("tag_class_weights")
+    if mode is None:
+        return None
+    if mode != "inverse_sqrt":
+        raise ValueError(f"Unknown tag_class_weights: {mode!r}")
+    return inverse_sqrt_frequency_weights(tag_counts(targets, rows))
+
+
 def build_compiled_student(cfg: dict[str, Any], total_steps: int) -> keras.Model:
     """Student with MLM or random init, compiled with the importance (+ tag) losses."""
     use_tags = cfg["targets"]["use_tags"]
@@ -303,10 +325,14 @@ def train_seed(cfg: dict[str, Any], seed: int, session_start: float | None = Non
         StudentSet.load(processed / "train"),
         StudentSet.load(processed / "validation"),
     )
-    tag_dir = cfg["paths"].get("tag_labels_dir")  # Student E: tags from a teacher
-    train_t = load_targets(labels_dir, "train", train_data, source, tag_dir)
-    val_t = load_targets(labels_dir, "validation", val_data, source, tag_dir)
+    tag_dir = cfg["paths"].get("tag_labels_dir")  # tags from another teacher
+    blend = cfg["targets"].get("blend")  # Student E: teacher scores blended with the soft oracle
+    train_t = load_targets(labels_dir, "train", train_data, source, tag_dir, blend)
+    val_t = load_targets(labels_dir, "validation", val_data, source, tag_dir, blend)
     train_rows, val_rows = np.flatnonzero(train_t.labelled), np.flatnonzero(val_t.labelled)
+    class_w = tag_class_weights(cfg, train_t, train_rows) if cfg["targets"]["use_tags"] else None
+    if class_w is not None:
+        log.info("tag class weights %s", dict(zip(TAGS, class_w, strict=True)))
     spe, epochs, total = steps_for(len(train_rows), tr["batch_size"], tr["epochs"], tr["max_steps"])
     use_tags, buckets = cfg["targets"]["use_tags"], tr["buckets"]
     train_ds = StudentDataset(
@@ -319,6 +345,7 @@ def train_seed(cfg: dict[str, Any], seed: int, session_start: float | None = Non
         max_batches=spe,
         buckets=buckets,
         pool_batches=tr["pool_batches"],
+        tag_class_weights=class_w,
     )
     val_ds = StudentDataset(
         val_data,
@@ -329,6 +356,7 @@ def train_seed(cfg: dict[str, Any], seed: int, session_start: float | None = Non
         shuffle=False,
         drop_last=False,
         buckets=buckets,
+        tag_class_weights=class_w,
     )
 
     model = build_compiled_student(cfg, total)
@@ -375,6 +403,7 @@ def train_seed(cfg: dict[str, Any], seed: int, session_start: float | None = Non
         "params": model.count_params(),
         "train_dialogues": len(train_rows),
         "validation_dialogues": len(val_rows),
+        "tag_class_weights": class_w,
         "steps_per_epoch": spe,
         "epochs_this_session": len(history.history.get("loss", [])),
         "started": started,

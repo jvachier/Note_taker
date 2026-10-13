@@ -1,14 +1,19 @@
 name: model1_teacher
-description: Qwen teacher labelling of DialogSum utterances (Kaggle + vLLM only).
+description: >-
+  Qwen teacher labelling of DialogSum utterances, v2 (Kaggle + vLLM only): reference-aware
+  prompt, 0-3 scale, self-consistency over sampled answers.
 seed: 0
 teachers:
-  qwen7b: Qwen/Qwen2.5-7B-Instruct-AWQ
-  qwen1_5b: Qwen/Qwen2.5-1.5B-Instruct
+  qwen14b: Qwen/Qwen2.5-14B-Instruct-AWQ   # v2: replaces the 7B as the strong teacher
+  qwen1_5b: Qwen/Qwen2.5-1.5B-Instruct     # weak-teacher baseline
 generation:
-  temperature: 0.0
-  max_new_tokens: 2048     # not in PLAN: room for one JSON entry per utterance
+  num_samples: 3           # self-consistency: answers merged per dialogue (mean score, majority tag)
+  temperature: 0.7         # for the samples; the retry is greedy
+  top_p: 0.95
+  max_new_tokens: 2048     # not in PLAN: room for one JSON entry per utterance (+ summary line)
 max_retries: 1             # retry = the invalid answer + a correction message (greedy decoding)
-score_range: [0, 10]
+use_reference: true        # v2: the prompt includes the dialogue's reference summaries
+score_range: [0, 3]        # v2: anchored 4-point scale (v1: 0-10)
 tags: [none, key_point, decision, action_item]
 splits: [train, validation, test]
 train_subset: null         # null = all train dialogues; PLAN fallback: 5000 (same subset per teacher)
@@ -21,7 +26,7 @@ vllm:                      # not in PLAN: engine settings for a T4 (no bf16)
   enable_prefix_caching: true  # the system prompt + instructions are shared by every request
 fallback:                  # used only if vLLM fails to install (PLAN 5.3)
   models:
-    qwen7b: Qwen/Qwen2.5-7B-Instruct
+    qwen14b: Qwen/Qwen2.5-14B-Instruct
     qwen1_5b: Qwen/Qwen2.5-1.5B-Instruct
   batch_size: 8
 paths:

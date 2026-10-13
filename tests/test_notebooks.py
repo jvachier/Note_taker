@@ -178,7 +178,8 @@ def test_model1_notebook_smoke_run_and_load_here(tmp_path):
 
     work = _execute(KAGGLE / "model1_scorer.ipynb", tmp_path)
     manifest = json.loads((work / "manifest_model1_scorer.json").read_text())
-    assert manifest["finished_all"] and manifest["complete_seeds"]["model1_student_A"] == [0]
+    assert manifest["finished_all"]
+    assert all(seeds == [0] for seeds in manifest["complete_seeds"].values())
     ckpt = work / "checkpoints"
     load_tokenizer(ckpt / "model1_tokenizer")
 
@@ -192,9 +193,17 @@ def test_model1_notebook_smoke_run_and_load_here(tmp_path):
     load_encoder_weights(fresh, ckpt / "mlm" / "encoder.keras")
 
     # Its labels and predictions are in the formats src/ reads.
-    for source in ("qwen7b", "qwen1_5b", "oracle"):
-        targets = load_targets(work / "data" / "labels" / source, "test", test, source)
+    for source in ("qwen14b", "qwen1_5b", "oracle", "oracle_soft"):
+        labels = work / "data" / "labels" / ("oracle" if source.startswith("oracle") else source)
+        targets = load_targets(labels, "test", test, source)
         assert targets.labelled.all()
+    oracle = work / "data" / "labels" / "oracle"
+    blend = {"labels_dir": oracle, "source": "oracle_soft", "weight": 0.5}
+    labels = work / "data" / "labels" / "qwen14b"
+    assert load_targets(labels, "test", test, "qwen14b", blend=blend).labelled.all()
+    first_label = json.loads((labels / "test.jsonl").read_text().splitlines()[0])
+    assert first_label["samples"] == 2 and max(first_label["raw_scores"]) <= 3
+    assert manifest["label_version"] == 2
     preds = work / "results" / "model1_student_A" / "seed_0" / "test_predictions.jsonl"
     first = json.loads(preds.read_text().splitlines()[0])
     assert set(first) == {"id", "scores", "tags"}

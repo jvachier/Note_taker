@@ -31,7 +31,7 @@ uv run --extra eval python -m src.model1_scorer.evaluate --config configs/model1
 ```
 
 Teacher labels (Stage 6a) are produced on Kaggle only, in a vLLM environment:
-`python -m src.model1_scorer.teacher.label --config configs/teacher.yaml --teacher qwen7b`.
+`python -m src.model1_scorer.teacher.label --config configs/teacher.yaml --teacher qwen14b`.
 
 Smoke tests (CPU, < 2 min): the Model 2 commands with `configs/model2_tiny.yaml`, the MLM
 commands with `configs/mlm_tiny.yaml`, the student commands with

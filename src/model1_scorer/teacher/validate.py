@@ -2,18 +2,26 @@
 
 An answer is valid when it contains a JSON array with exactly one object per utterance id
 ``1..n``, each with an integer-valued ``score`` inside ``score_range`` and a ``tag`` from the
-tag set. Surrounding text or a Markdown code fence is tolerated; anything else is rejected
-with a short reason (fed back to the teacher in the retry prompt).
+tag set. Surrounding text (e.g. the ``Summary:`` line of the prompt without a reference) or a
+Markdown code fence is tolerated; anything else is rejected with a short reason (fed back to
+the teacher in the retry prompt).
+
+Self-consistency (:func:`combine_samples`): several sampled answers for one dialogue are
+validated separately and the valid ones are merged: mean score per utterance, majority tag.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+_ARRAY_RE = re.compile(r"\[\s*[{\]]")  # an array of objects (or empty), not "[" in prose
+# Majority-vote ties go to the rarer, more specific tag.
+TAG_PRIORITY = ("decision", "action_item", "key_point", "none")
 
 
 class InvalidAnswer(ValueError):
@@ -24,18 +32,20 @@ class InvalidAnswer(ValueError):
 class TeacherLabels:
     """Validated labels for one dialogue, in utterance order."""
 
-    raw_scores: list[int]
+    raw_scores: list[float]  # teacher scale (int for one answer, mean over samples otherwise)
     scores: list[float]  # normalised to [0, 1]
     tags: list[str]
+    samples: int = 1  # valid answers merged into these labels
 
 
 def extract_json_array(text: str) -> list:
     """The first JSON array in ``text`` (inside a code fence if there is one)."""
     fenced = _FENCE_RE.search(text)
     body = fenced.group(1) if fenced else text
-    start = body.find("[")
-    if start < 0:
+    match = _ARRAY_RE.search(body)
+    if match is None:
         raise InvalidAnswer("no JSON array found")
+    start = match.start()
     try:
         value, _ = json.JSONDecoder().raw_decode(body[start:])
     except json.JSONDecodeError as err:
@@ -91,4 +101,32 @@ def validate_answer(
         raw_scores=raw,
         scores=[(s - lo) / (hi - lo) for s in raw],
         tags=[by_id[i][1] for i in range(1, n + 1)],
+    )
+
+
+def combine_samples(samples: Sequence[TeacherLabels], score_range: Sequence[int]) -> TeacherLabels:
+    """Merge valid answers for one dialogue: mean raw score, majority tag (ties by priority).
+
+    Raises:
+        ValueError: if ``samples`` is empty or the samples disagree on the utterance count.
+    """
+    if not samples:
+        raise ValueError("no valid samples to combine")
+    n = len(samples[0].raw_scores)
+    if any(len(s.raw_scores) != n for s in samples):
+        raise ValueError("samples have different utterance counts")
+    lo, hi = score_range
+    raw = [round(sum(s.raw_scores[i] for s in samples) / len(samples), 4) for i in range(n)]
+    rank = {t: k for k, t in enumerate(TAG_PRIORITY)}
+    tags = []
+    for i in range(n):
+        votes = Counter(s.tags[i] for s in samples)
+        best = max(votes.values())
+        tied = [t for t in votes if votes[t] == best]
+        tags.append(min(tied, key=lambda t: rank.get(t, len(rank))))
+    return TeacherLabels(
+        raw_scores=raw,
+        scores=[round((r - lo) / (hi - lo), 4) for r in raw],
+        tags=tags,
+        samples=len(samples),
     )

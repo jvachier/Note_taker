@@ -93,7 +93,7 @@ def test_encode_split_and_targets(tmp_path, raw, tiny_assets):
     data = m1data.StudentSet.load(out)
     labels = tmp_path / "labels"
     write_teacher_labels(labels, raw, skip={"validation_2"})
-    t = m1data.load_targets(labels, "validation", data, "qwen7b")
+    t = m1data.load_targets(labels, "validation", data, "qwen14b")
     np.testing.assert_array_equal(t.labelled, [True, True, False, True])
     assert t.scores[1].tolist() == pytest.approx([0.1, 0.8, 0.4])  # 4th utterance dropped
     assert (t.scores[2] == -1).all() and t.tags[0].tolist() == [1, 2, 3]
@@ -103,6 +103,62 @@ def test_encode_split_and_targets(tmp_path, raw, tiny_assets):
     )
     oracle = m1data.load_targets(labels, "validation", data, "oracle")
     assert oracle.scores[0].tolist() == [0, 1, 0] and (oracle.tags == -1).all()
+
+
+def _three_dialogues(tmp_path):
+    """A StudentSet of 3 dialogues with 3 utterances each (no tokenizer needed)."""
+    return m1data.StudentSet(
+        ids=["d0", "d1", "d2"],
+        token_ids=np.ones((3, 8), "int32"),
+        speaker_ids=np.ones((3, 8), "int8"),
+        cls_positions=np.tile(np.array([[0, 2, 4]], "int32"), (3, 1)),
+        n_utterances=np.full(3, 3, "int32"),
+    )
+
+
+def test_soft_oracle_and_blended_targets(tmp_path):
+    data = _three_dialogues(tmp_path)
+    oracle, teacher = tmp_path / "oracle", tmp_path / "teacher"
+    write_jsonl(
+        oracle / "train.jsonl",
+        [
+            {"id": "d0", "labels": [1, 0, 0], "soft": [1.0, 0.5, 0.0]},
+            {"id": "d1", "labels": [0, 0, 1], "soft": [0.2, 0.0, 1.0]},
+            {"id": "d2", "labels": [0, 1, 0], "soft": [0.0, 1.0, 0.0]},
+        ],
+    )
+    write_jsonl(
+        teacher / "train.jsonl",
+        [  # no labels for d2 (teacher failure)
+            {"id": "d0", "scores": [0.0, 1.0, 0.0], "tags": ["none", "decision", "none"]},
+            {"id": "d1", "scores": [0.6, 0.6, 0.6], "tags": ["key_point"] * 3},
+        ],
+    )
+    soft = m1data.load_targets(oracle, "train", data, "oracle_soft")
+    assert soft.scores[1].tolist() == pytest.approx([0.2, 0.0, 1.0]) and soft.labelled.all()
+
+    blend = {"labels_dir": oracle, "source": "oracle_soft", "weight": 0.25}
+    t = m1data.load_targets(teacher, "train", data, "qwen14b", blend=blend)
+    assert t.labelled.tolist() == [True, True, False]  # d2 lacks the teacher
+    assert t.scores[0].tolist() == pytest.approx([0.25, 0.875, 0.0])
+    assert t.scores[1].tolist() == pytest.approx([0.5, 0.45, 0.7])
+    assert (t.scores[2] == -1).all() and (t.tags[2] == -1).all()
+    assert t.tags[0].tolist() == [0, 2, 0]  # tags stay the teacher's
+    assert m1data.tag_counts(t, np.array([0, 1])) == [2, 3, 1, 0]
+
+
+def test_tag_class_weights_favour_rare_tags():
+    targets = m1data.Targets(
+        scores=np.zeros((2, 4), "float32"),
+        tags=np.array([[0, 0, 0, 1], [0, 1, 2, -1]], "int8"),
+        labelled=np.ones(2, bool),
+    )
+    cfg = {"loss": {"tag_class_weights": "inverse_sqrt"}}
+    w = train.tag_class_weights(cfg, targets, np.array([0, 1]))
+    assert w[2] > w[1] > w[0] and w[3] == 0.0  # no action_item in the data
+    assert train.tag_class_weights({"loss": {"tag_class_weights": None}}, targets, [0]) is None
+    with pytest.raises(ValueError, match="Unknown"):
+        train.tag_class_weights({"loss": {"tag_class_weights": "focal"}}, targets, [0])
 
 
 # --- loss ---------------------------------------------------------------------------------
@@ -159,6 +215,8 @@ def test_student_outputs_and_mlm_init(tmp_path):
 def test_inference_rule():
     assert select_top_k([0.1, 0.9, 0.5, 0.9, 0.2], 3) == [1, 2, 3]
     assert select_top_k([1, 1, 1, 1], 3) == [0, 1, 2]  # ties -> earlier
+    assert select_top_k([1, 1, 1, 1], 2, tie_break=[0.9, 0.1, 0.5, 0.3]) == [1, 3]
+    assert select_top_k([0.2, 1, 1], 1, tie_break=[0.0, 0.9, 0.1]) == [2]
     assert select_top_k([0.4], 3) == [0]
     utts = ["a", "b", "c", "d"]
     tags = ["action_item", "none", "decision", "action_item"]
@@ -200,7 +258,7 @@ def _student_config(tmp_path, configs_dir, tiny_assets, raw, name, **extra):
 
 def test_train_students_and_evaluate(tmp_path, configs_dir, tiny_assets, raw):
     labels = tmp_path / "labels"
-    write_teacher_labels(labels / "qwen7b", raw, skip={"train_3"})
+    write_teacher_labels(labels / "qwen14b", raw, skip={"train_3"})
     write_teacher_labels(labels / "qwen1_5b", raw, skip={"test_1"})
     oracle = [
         {"id": r["id"], "labels": [0, 1, 0, 0][: len(r["utterances"])], "selected": [1]}
@@ -216,15 +274,16 @@ def test_train_students_and_evaluate(tmp_path, configs_dir, tiny_assets, raw):
         tiny_assets,
         raw,
         "student_A",
-        labels_dir=labels / "qwen7b",
+        labels_dir=labels / "qwen14b",
         init_checkpoint=tmp_path / "encoder.keras",
-        lines=["init: mlm", "targets:\n  source: qwen7b\n  use_tags: true"],
+        lines=["init: mlm", "targets:\n  source: qwen14b\n  use_tags: true"],
     )
     m1data.main(["--config", str(cfg_a)])
     train.main(["--config", str(cfg_a), "--all-seeds"])
     res = tmp_path / "results" / "student_A" / "seed_0"
     manifest = json.loads((res / "manifest.json").read_text())
     assert manifest["status"] == "complete" and manifest["train_dialogues"] == 11  # train_3 skipped
+    assert len(manifest["tag_class_weights"]) == 4  # inverse_sqrt from model1_student_A
     preds = list(read_jsonl(res / "test_predictions.jsonl"))
     assert len(preds) == 4 and all(len(p["scores"]) == len(p["tags"]) for p in preds)
     assert all(0 <= s <= 1 for p in preds for s in p["scores"])
@@ -241,9 +300,11 @@ def test_train_students_and_evaluate(tmp_path, configs_dir, tiny_assets, raw):
     evaluate.main(["--config", str(eval_cfg)])
     table = (tmp_path / "results" / "tables" / "model1.md").read_text()
     assert "3 test dialogues" in table  # test_1 is not labelled by the 1.5B teacher
-    for name in ("Lead-3", "Oracle", "Teacher qwen7b", "Teacher qwen1_5b", "student_A"):
+    for name in ("Lead-3", "Oracle", "Teacher qwen14b", "Teacher qwen1_5b", "student_A"):
         assert f"| {name} |" in table
-    teacher = json.loads((tmp_path / "results" / "model1_eval" / "teacher_qwen7b.json").read_text())
+    teacher = json.loads(
+        (tmp_path / "results" / "model1_eval" / "teacher_qwen14b.json").read_text()
+    )
     ref = teacher["runs"][0]
     assert ref["retention"] == pytest.approx(1.0) and ref["spearman"] == pytest.approx(1.0)
     assert ref["jaccard"] == 1.0 and ref["tags"]["decision"]["f1"] == pytest.approx(1.0)

@@ -8,11 +8,11 @@ model2:
 model1:
   eval_config: configs/model1_eval.yaml   # systems, reference teacher, top_k and paths
   mlm_dir: results/model1_mlm
-  main_student: model1_student_A          # the student we ship (7B teacher, MLM init)
+  main_student: model1_student_A          # the student we ship (14B teacher, MLM init)
   ablation: {with_mlm: model1_student_A, without_mlm: model1_student_D_noMLM}
   example_dialogue: test_0   # dialogue shown in the per-utterance score heatmap
   position_bins: 5           # bins of relative position in the dialogue
-  position_systems: [Lead-3, Oracle, Teacher qwen7b, model1_student_A, model1_student_C]
+  position_systems: [Lead-3, Oracle, Teacher qwen14b, model1_student_A, model1_student_C]
 verdicts:                    # thresholds behind the good / mixed / poor badges
   retention_target: 0.90     # PLAN 5.6
   good_f1: 0.75              # class F1 at or above: strong

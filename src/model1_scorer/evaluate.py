@@ -6,11 +6,12 @@ Usage (local CPU, after the Kaggle runs are fetched)::
 
 Systems: lead-3 and the oracle (reference rows), both teachers (their own top-3), and every
 student seed (``test_predictions.jsonl`` from :mod:`train`). All use the same inference rule
-(:mod:`notes`) and the same test dialogues: those labelled by every teacher.
+(:mod:`notes`) and the same test dialogues: those labelled by every teacher. Score ties in the
+top-k are broken by seeded random keys per dialogue (:func:`tie_keys`), not by position.
 
 Metrics per system:
     ROUGE-1/2/L F1 (mean over the 3 references) and BERTScore F1 of the notes text;
-    retention = mean ROUGE(1, 2, L) of the system / that of the reference (7B) teacher;
+    retention = mean ROUGE(1, 2, L) of the system / that of the reference teacher;
     agreement with the reference teacher: per-dialogue Spearman of the scores, top-k Jaccard;
     ``decision`` / ``action_item`` F1 against the reference teacher's tags (agreement with the
     teacher, not ground truth);
@@ -25,6 +26,7 @@ import argparse
 import json
 import logging
 import time
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -61,19 +63,29 @@ def labels_run(path: Path) -> Run:
     return {r["id"]: {"scores": r["scores"], "tags": r.get("tags")} for r in read_jsonl(path)}
 
 
-def selection(entry: dict[str, Any], k: int) -> list[int]:
-    return entry.get("selected") or select_top_k(entry["scores"], k)
+def tie_keys(dialogue_id: str, n: int, seed: int) -> list[float]:
+    """Seeded random tie-break keys for one dialogue (the same for every system)."""
+    rng = np.random.default_rng([seed, zlib.crc32(dialogue_id.encode())])
+    return rng.random(n).tolist()
+
+
+def selection(entry: dict[str, Any], k: int, dialogue_id: str = "", seed: int = 0) -> list[int]:
+    """The system's own selection if it has one, else its top-k with random tie-breaking."""
+    if entry.get("selected"):
+        return entry["selected"]
+    keys = tie_keys(dialogue_id, len(entry["scores"]), seed)
+    return select_top_k(entry["scores"], k, keys)
 
 
 def evaluate_run(
     run: Run, dialogues: dict[str, dict], reference: Run, ids: list[str], cfg: dict[str, Any]
 ) -> dict[str, Any]:
     """Summary quality and agreement with the reference teacher on ``ids``."""
-    k = cfg["top_k"]
+    k, seed = cfg["top_k"], cfg["seed"]
     texts, refs = [], []
     for i in ids:
         tags = run[i].get("tags")
-        texts.append(notes_text(dialogues[i]["utterances"], selection(run[i], k), tags))
+        texts.append(notes_text(dialogues[i]["utterances"], selection(run[i], k, i, seed), tags))
         refs.append(dialogues[i]["summaries"])
     metrics: dict[str, Any] = {"dialogues": len(ids), **rouge(texts, refs, cfg["use_stemmer"])}
     if cfg["bertscore"]["enabled"]:
@@ -85,7 +97,12 @@ def evaluate_run(
     pairs = [(p[: min(len(p), len(t))], t[: min(len(p), len(t))]) for p, t in pairs]
     metrics["spearman"] = mean_spearman([p for p, _ in pairs], [t for _, t in pairs])
     metrics["jaccard"] = float(
-        np.mean([jaccard(selection(run[i], k), selection(reference[i], k)) for i in ids])
+        np.mean(
+            [
+                jaccard(selection(run[i], k, i, seed), selection(reference[i], k, i, seed))
+                for i in ids
+            ]
+        )
     )
     if all(run[i].get("tags") for i in ids):
         pred, true = [], []

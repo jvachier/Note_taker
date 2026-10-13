@@ -14,7 +14,7 @@ the parts listed in ``PULL`` to the same relative paths here:
 
     model2_cleanup  checkpoints/model2/ (best.keras per seed, tokenizer), results/
     model1_scorer   checkpoints/{mlm,model1_student_*,model1_tokenizer}/, results/,
-                    data/labels/{qwen7b,qwen1_5b,oracle}/
+                    data/labels/{qwen14b,qwen1_5b,oracle}/
 
 Resume-only state (``backup/``) is skipped. The notebook manifest goes to ``results/kaggle/``.
 """

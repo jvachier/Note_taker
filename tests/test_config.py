@@ -117,17 +117,26 @@ def test_model1_encoder_matches_plan_and_mlm(configs_dir):
 
 
 def test_students_differ_only_in_targets(configs_dir):
-    a, b, c, d = (load_config(configs_dir / f"model1_student_{s}.yaml") for s in "ABCD")
-    assert a["model"] == b["model"] == c["model"] == d["model"]
-    assert (a["targets"]["source"], b["targets"]["source"], c["targets"]["source"]) == (
-        "qwen7b",
+    a, b, c, d, e = (load_config(configs_dir / f"model1_student_{s}.yaml") for s in "ABCDE")
+    assert a["model"] == b["model"] == c["model"] == d["model"] == e["model"]
+    assert [x["targets"]["source"] for x in (a, b, c, e)] == [
+        "qwen14b",
         "qwen1_5b",
-        "oracle",
-    )
+        "oracle_soft",
+        "qwen14b",
+    ]
     assert c["targets"]["use_tags"] is False
     assert d["init"] == "random" and d["targets"] == a["targets"]
-    for cfg in (a, b, c, d):
+    assert e["targets"]["blend"] == {
+        "labels_dir": "data/labels/oracle",
+        "source": "oracle_soft",
+        "weight": 0.5,
+    }
+    teachers = load_config(configs_dir / "teacher.yaml")["teachers"]
+    assert {a["targets"]["source"], b["targets"]["source"]} == set(teachers)
+    for cfg in (a, b, c, d, e):
         assert cfg["seeds"] == [0, 1, 2]
+        assert cfg["training"]["early_stopping"]["monitor"] == "val_loss"
 
 
 MODEL_TINY = sorted(p.name for p in CONFIG_FILES if "_tiny" in p.name and "tokenizer" not in p.name)

@@ -1,5 +1,5 @@
 name: model1_oracle
-description: Greedy ROUGE oracle labels (selected=1, others=0).
+description: Greedy ROUGE oracle labels (selected=1, others=0) and soft single-utterance labels.
 seed: 0
 rouge_types: [rouge1, rouge2]
 max_utterances: 3

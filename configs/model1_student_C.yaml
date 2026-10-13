@@ -1,9 +1,9 @@
 base: model1_student_A.yaml
 name: model1_student_C
-description: Student C, trained on oracle 0/1 labels (importance head only), MLM init.
+description: Student C, trained on soft oracle labels (importance head only), MLM init.
 paths:
   labels_dir: data/labels/oracle
   output_dir: checkpoints/model1_student_C
 targets:
-  source: oracle
+  source: oracle_soft      # v2: soft single-utterance ROUGE labels (v1: greedy 0/1 labels)
   use_tags: false

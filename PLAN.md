@@ -263,3 +263,96 @@ v1 targets: A = 7B teacher, C = oracle 0/1, E = oracle 0/1 importance + 7B tags 
 7. Students A–D, 3 seeds each → evaluation → results tables. (Done: v1, plus Student E.)
 7b. v2: teacher labelling (14B, 1.5B; reference, 0-3 scale, 3 samples) + soft oracle → students A–E, 3 seeds each → evaluation → results tables.
 8. Publish both models to Hugging Face: `.keras` file, `tokenizer.json`, config, model card (data, licence, method, metrics, limitations, usage snippet).
+
+---
+
+## 9. Proposal: Model 1 v3 — abstractive notes (PENDING APPROVAL, logged 2026-10-13)
+
+Not approved and not in the order of work. Nothing here is implemented.
+
+**Why.** Extractive selection is capped on DialogSum because the references are third-person
+rewrites. In the DialogSum paper (Tables 4–5), the extractive oracle reaches 37.9 ROUGE-1, a
+**Transformer trained from scratch** writing summaries reaches 35.9, and pretrained BART-large
+reaches 47.3. Our v1 students are near Lead on that scale. Raw numbers differ from ours because
+the ROUGE implementation differs (their Lead-2 = 27.5, our Lead-3 = 21.9); compare ratios.
+
+**Open decision:** (a) from scratch + a fine-tuned KerasHub BART-base as a reference row only
+(recommended); (b) from scratch only; (c) switch to a pretrained model (requires rewriting
+CLAUDE.md and this plan). Compute must stay small.
+
+### 9.1 Architecture (~27M params)
+- **Encoder**: the existing 6-layer, d384 encoder, initialised from the existing MLM checkpoint
+  (no new MLM run). Same BertSum-style input (`[CLS] utt [SEP] …`, speaker embeddings) so the
+  utterance heads keep working.
+- **Decoder** (new, from scratch, `keras.ops`): 4 layers, d384, 6 heads, FFN 1,536, pre-LN,
+  causal self-attention + cross-attention to the encoder. Token embedding and output projection
+  tied to the encoder's embedding (shared 16k WordPiece vocab) → ~9.5M new parameters.
+- **Heads**: the decoder's language-model head (summary) + the existing importance and tag
+  heads on each `[CLS]` (multi-task, shared encoder).
+- **Targets**: `#PersonN#` in summaries mapped to the reserved `[S1]`…`[S8]` tokens and back.
+  Summaries are capped at 96 tokens (DialogSum summaries are ~30–40 tokens).
+- **Casing**: the tokenizer is uncased, so generated summaries are lowercase (ROUGE is
+  case-insensitive). For display, pass them through **Model 2** to restore casing.
+
+### 9.2 Denoising pretraining (BART-style, fixed time budget)
+- Input: 256-token chunks of DialogSum train dialogues (×5) + WikiText-103 train with **text
+  infilling** (spans of Poisson(λ = 3) length replaced by one `[MASK]`, 30% of tokens).
+  Target: the original chunk.
+- Encoder from the MLM checkpoint, decoder random. Throughput probe, then a **2–3 GPU-hour**
+  budget (same mechanism as the MLM stage).
+
+### 9.3 Teacher summaries (same Kaggle pass as the v2 labels)
+- Qwen2.5-14B writes **3 summaries per train/validation dialogue** (T = 0.7) in DialogSum style:
+  third person, `#PersonN#` names, at most 3 sentences, with 2 human references from other train
+  dialogues as style examples. The teacher does **not** see the dialogue's own reference.
+- Filters: length 10–80 words, speaker tags valid for the dialogue, and drop the 10% with the
+  lowest ROUGE-L against the human reference (computed in the labelling stage, not in
+  training code).
+- Cost: ~60 output tokens × 3 per dialogue ≈ 2.2M tokens, about +30–40% on top of the v2
+  labelling, sharing the loaded model and prefix cache.
+- No extra dialogue corpora by default: DailyDialog (a DialogSum source) could overlap
+  validation/test and would need deduplication first.
+
+### 9.4 Fine-tuning
+- Per epoch, each train dialogue gives one target: the human summary with probability 0.5,
+  else one of its teacher summaries (sequence-level distillation, Kim & Rush 2016; several
+  teacher summaries per dialogue keep the student from collapsing to one style).
+- Loss: token cross-entropy with label smoothing 0.1 + 0.5 × (importance + tag losses of §5.5,
+  on the v2 targets).
+- AdamW, lr 1e-4 encoder / 3e-4 decoder, warmup 10%, batch 32, up to 20 epochs, early stopping
+  on validation loss (ROUGE stays evaluation-only).
+- Decoding: beam search (4 beams, length penalty, no repeated 3-grams) written with `keras.ops`;
+  no KV cache at first (summaries are short; check CPU latency).
+- Budget: ~1 GPU-hour per seed, 3 seeds.
+
+### 9.5 Output and evaluation
+- Notes = generated summary (casing by Model 2) + **Decisions** and **Action items** bullets from
+  the utterance heads.
+- Summary rows: ROUGE-1/2/L and BERTScore vs the 3 references; Lead-3, extractive oracle, best
+  extractive student (v2), Qwen-14B zero-shot summary (without the reference, so a fair upper
+  baseline), and under option (a) fine-tuned BART-base as a reference row.
+- Ablations, one seed each: without teacher summaries (human only); without denoising
+  pretraining.
+- Expected (guess): ~38–42 ROUGE-1 on the paper's scale — above the paper's from-scratch 35.9
+  thanks to our pretraining and the extra targets, below BART-large's 47.3.
+
+### 9.6 Optional: MiniLM-style encoder distillation (separate approval)
+MiniLM-L6-H384 has the same shape as our encoder; it is strong because it is distilled from a
+large encoder's self-attention relations (MiniLMv2: query–query, key–key, value–value
+relations, KL loss, teacher's upper-middle layer) rather than trained with MLM from scratch.
+Here: a RoBERTa teacher via KerasHub (JAX) during encoder pretraining only, relations
+averaged from subwords to words because the tokenizers differ. This puts a pretrained teacher
+in the training environment, which CLAUDE.md currently reserves for our own models. It helps the
+encoder, not the extractive ceiling, so it would come after 9.1–9.5.
+
+### 9.7 Compute (2× T4 sessions, 12 h cap)
+| Session | Work | Time |
+|---|---|---|
+| 1 | v2 labels (14B, 3 samples) + teacher summaries, 1.5B labels | ~7–9 h (may need to resume) |
+| 2 | denoising pretraining (2–3 h) + fine-tuning 3 seeds (~3 h) + extractive students if still wanted | ~7–9 h |
+| optional | BART-base reference row (option a) | ~1 h |
+Savings: reuse the MLM encoder; check teacher quality on the validation split (~15 min) before
+the full run; drop extractive students B and D if compute is tight.
+
+Sources: DialogSum (arXiv 2105.06762), MiniLMv2 (arXiv 2012.15828), sequence-level KD (Kim &
+Rush 2016), factual dialogue summarization from LLMs (arXiv 2406.14709), DisCal (arXiv 2310.13760).

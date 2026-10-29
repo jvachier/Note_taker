@@ -33,9 +33,7 @@ class Backend(Protocol):
 
     def clean(self, text: str) -> tuple[str, float]: ...
 
-    def annotate(
-        self, speakers: list[str], sentences: list[str], threshold: float | None = None
-    ) -> tuple[list[Note], float]: ...
+    def annotate(self, speakers: list[str], sentences: list[str]) -> tuple[list[Note], float]: ...
 
 
 def model_badges(models: Backend) -> list[html.Span]:
@@ -78,7 +76,7 @@ def cleanup_tab() -> dcc.Tab:
     )
 
 
-def notes_tab(threshold: float) -> dcc.Tab:
+def notes_tab() -> dcc.Tab:
     return dcc.Tab(
         label="Meeting notes",
         value="notes",
@@ -111,19 +109,6 @@ def notes_tab(threshold: float) -> dcc.Tab:
                     }
                 ],
                 value=["clean"],
-            ),
-            html.Label(
-                "Keep threshold: lower keeps more sentences (more complete notes, more noise); "
-                f"the model's tuned value is {threshold:.2f}.",
-                className="meta",
-            ),
-            dcc.Slider(
-                id="notes-threshold",
-                min=0.05,
-                max=0.95,
-                step=0.05,
-                value=round(threshold, 2),
-                marks={v: f"{v:.1f}" for v in (0.1, 0.3, 0.5, 0.7, 0.9)},
             ),
             html.Button("Make notes", id="notes-btn", n_clicks=0, className="primary"),
             dcc.Loading(html.Div(id="notes-output", className="output")),
@@ -248,7 +233,7 @@ def create_app(models: Backend) -> Dash:
             dcc.Tabs(
                 id="tabs",
                 value="cleanup",
-                children=[cleanup_tab(), notes_tab(released_threshold(models))],
+                children=[cleanup_tab(), notes_tab()],
             ),
         ]
     )
@@ -290,18 +275,14 @@ def create_app(models: Backend) -> Dash:
         Input("notes-btn", "n_clicks"),
         State("notes-input", "value"),
         State("notes-clean", "value"),
-        State("notes-threshold", "value"),
         prevent_initial_call=True,
     )
-    def run_notes(
-        _: int, text: str | None, options: list[str] | None, threshold: float | None = None
-    ) -> list:
+    def run_notes(_: int, text: str | None, options: list[str] | None) -> list:
         try:
             dialogue = parse_dialogue(text or "")
         except ValueError as err:
             return [html.P(str(err), className="error")]
         clean_first = "clean" in (options or [])
-        threshold = released_threshold(models) if threshold is None else float(threshold)
         try:
             ms = 0.0
             if clean_first:
@@ -311,11 +292,11 @@ def create_app(models: Backend) -> Dash:
                 ]
                 ms += sum(t for _, t in cleaned)
             speakers, sentences = meeting_sentences(dialogue)
-            notes, notes_ms = models.annotate(speakers, sentences, threshold)
+            notes, notes_ms = models.annotate(speakers, sentences)
         except Exception:
             log.exception("notes failed")
             return [html.P(MODEL_ERROR, className="error")]
-        return render_notes(notes, threshold, ms + notes_ms, clean_first)
+        return render_notes(notes, released_threshold(models), ms + notes_ms, clean_first)
 
     return app
 

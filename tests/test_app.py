@@ -176,8 +176,6 @@ def test_models_and_dash_callbacks(release, monkeypatch):
     notes, _ = models.annotate(speakers, [f"Sentence number {i}." for i in range(24)])
     assert [n.index for n in notes] == list(range(24))
     assert all(0 <= n.score <= 1 for n in notes) and {n.zone for n in notes} <= set(ZONES)
-    every, _ = models.annotate(speakers, [f"Sentence number {i}." for i in range(24)], 0.0)
-    assert all(n.kept for n in every)  # the slider's threshold overrides the released one
 
     client = create_app(models).server.test_client()
     assert client.get("/").status_code == 200
@@ -206,7 +204,6 @@ def test_models_and_dash_callbacks(release, monkeypatch):
         [
             {"id": "notes-input", "property": "value", "value": "a: hi\nb: send it\na: ok"},
             {"id": "notes-clean", "property": "value", "value": ["clean"]},
-            {"id": "notes-threshold", "property": "value", "value": 0.05},
         ],
     )
     assert "Notes" in out and "Importance of every sentence" in out and "Action items" in out
@@ -216,7 +213,6 @@ def test_models_and_dash_callbacks(release, monkeypatch):
         [
             {"id": "notes-input", "property": "value", "value": ""},
             {"id": "notes-clean", "property": "value", "value": []},
-            {"id": "notes-threshold", "property": "value", "value": 0.5},
         ],
     )
     assert "at least one line" in out
@@ -228,7 +224,7 @@ class FailingBackend:
     def clean(self, text):
         raise RuntimeError("model crashed")
 
-    def annotate(self, speakers, sentences, threshold=None):
+    def annotate(self, speakers, sentences):
         raise RuntimeError("model crashed")
 
 
@@ -257,7 +253,6 @@ def test_callbacks_report_errors_and_too_long_input():
     notes = [
         {"id": "notes-input", "property": "value", "value": "a: hi\nb: ok"},
         {"id": "notes-clean", "property": "value", "value": ["clean"]},
-        {"id": "notes-threshold", "property": "value", "value": 0.5},
     ]
     assert MODEL_ERROR in call("notes-output", "notes-btn", notes)
 

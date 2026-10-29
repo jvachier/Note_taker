@@ -118,15 +118,10 @@ class Models:
         )
         return out, (time.perf_counter() - start) * 1000
 
-    def annotate(
-        self, speakers: list[str], sentences: list[str], threshold: float | None = None
-    ) -> tuple[list[Note], float]:
-        """Every sentence with its importance, zone, kept flag and owner / deadline (ms).
-
-        ``threshold`` overrides the released keep threshold (the app's slider)."""
-        settings = dict(self.notes.config["inference"])
-        if threshold is not None:
-            settings["threshold"] = threshold
+    def annotate(self, speakers: list[str], sentences: list[str]) -> tuple[list[Note], float]:
+        """Every sentence with its importance, zone, kept flag and owner / deadline (ms), with
+        the released settings (keep threshold tuned on validation)."""
+        settings = self.notes.config["inference"]
         start = time.perf_counter()
         notes = annotate(self.notes.model, self.notes.tokenizer, speakers, sentences, settings)
         return notes, (time.perf_counter() - start) * 1000

@@ -598,6 +598,9 @@ Steps 4–5 wait for the corpus v1.0 release.
     and checks its architecture.
   - Removed as unused: Spearman / Jaccard metrics and SciPy, BERTScore and the `eval` extra,
     `GatherPositions`, `speaker_token_id`, `load_noise_vocab`, `baseline_config`.
+  - App: the keep-threshold slider is removed. The model's importance scores are nearly binary
+    (0.00–0.04 or 0.98–1.00 on the examples), so thresholds between 0.1 and 0.9 gave the same
+    notes. The chart still marks the tuned threshold (0.40).
 - 2026-10-29, **v1.1 results, balanced zone calibration and release choice (approved).**
   - E1 and E4 × 3 seeds on corpus v1.1. AMI test importance F1: **E1 0.578 ± 0.006**,
     E4 0.567 ± 0.006 (DistilBERT 0.580, RoBERTa-Large 0.634). Distillation gave no measurable

@@ -20,8 +20,8 @@ WordPiece tokenizer, own architectures, no pretrained weights), and a demo app t
 
 | Model | What it does | Size | Hugging Face |
 |---|---|---|---|
-| **Model 2 – Cleanup** | Restores punctuation and casing in lowercase speech-to-text output | 7.3M params, 29 MB | `<hf-user>/punctuation-casing-en-7m` |
-| **Model 1 – Meeting notes** | Picks the sentences of a meeting that matter and sorts them into decisions, action items (owner, deadline) and key points | 20.9M params, 84 MB | `<hf-user>/meeting-notes-en-21m` |
+| **Model 2 – Cleanup** | Restores punctuation and casing in lowercase speech-to-text output | 7.3M params, 29 MB | [punctuation-casing-en-7m](https://huggingface.co/Jvachier/punctuation-casing-en-7m) |
+| **Model 1 – Meeting notes** | Picks the sentences of a meeting that matter and sorts them into decisions, action items (owner, deadline) and key points | 20.9M params, 84 MB | [meeting-notes-en-21m](https://huggingface.co/Jvachier/meeting-notes-en-21m) |
 
 Both run on CPU. Headline results (test sets, mean ± std over 3 seeds):
 - **Cleanup:** punctuation macro-F1 0.789 ± 0.001 and casing accuracy 0.965 on DialogSum
@@ -31,8 +31,10 @@ Both run on CPU. Headline results (test sets, mean ± std over 3 seeds):
   ([table](results/tables/model1_v3.md)). Model 1 is extractive: it selects sentences, it does
   not write new text.
 
-`<hf-user>` stands for the Hugging Face account that hosts the models. The model cards there
-describe the data, training, limitations and licences.
+The model cards describe the data, training, limitations and licences. Model 1 is trained on
+the corpus `meeting-notes-extractive-v1`, on
+[Hugging Face](https://huggingface.co/datasets/Jvachier/meeting-notes-extractive-v1) and
+[Kaggle](https://www.kaggle.com/datasets/jvachier/meeting-notes-extractive-v1).
 [PLAN.md](PLAN.md) is the full design and the log of every decision.
 
 ## How the models work
@@ -66,7 +68,7 @@ pip install "keras>=3.6" jax tokenizers huggingface_hub
 import sys
 from huggingface_hub import snapshot_download
 
-folder = snapshot_download("<hf-user>/meeting-notes-en-21m")
+folder = snapshot_download("Jvachier/meeting-notes-en-21m")
 sys.path.insert(0, folder)
 import modeling  # the model's own code, shipped in the repo
 
@@ -85,7 +87,7 @@ A Dash app with both models: punctuation restoration, and meeting notes from a t
 `Name: text` line per turn), with a chart of every sentence's importance.
 
 ```bash
-export HF_NAMESPACE=<hf-user>    # the Hub account hosting the models (or put it in a .env file)
+export HF_NAMESPACE=Jvachier     # the Hub account hosting the models (or put it in a .env file)
 docker compose up --build        # open http://localhost:8050
 ```
 
@@ -133,7 +135,7 @@ uv run python -m src.eval.aggregate --exp model2_cleanup                       #
 ```
 
 **Model 1 – Meeting notes, v3** (PLAN.md §10). Training data is the gold-labelled corpus
-`meeting-notes-extractive-v1` (built in the companion repository `meeting-notes-extractive-corpus`)
+`meeting-notes-extractive-v1` ([Hugging Face](https://huggingface.co/datasets/Jvachier/meeting-notes-extractive-v1), [Kaggle](https://www.kaggle.com/datasets/jvachier/meeting-notes-extractive-v1))
 (v1.1, in `data/raw/meeting_notes_v1_1/`). The sentence encoder starts from the MLM checkpoint
 `checkpoints/mlm/encoder.keras` (`notebooks/kaggle/model1_scorer.ipynb`).
 1. `model1_teachers.ipynb`: teacher and baseline outputs (Qwen3-0.6B, fine-tuned RoBERTa-Large

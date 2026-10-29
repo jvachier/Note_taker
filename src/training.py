@@ -125,6 +125,8 @@ class TimeGuard(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None) -> None:
         now = time.time()
         self._longest_epoch = max(self._longest_epoch, now - self._epoch_start)
+        if epoch + 1 >= (self.params or {}).get("epochs", math.inf):
+            return  # the last epoch: training ends anyway, nothing was cut short
         if now - self._start + 1.2 * self._longest_epoch > self.limit:
             log.warning("TimeGuard: next epoch would exceed %.2f h, stopping.", self.limit / 3600)
             self.stopped = self.model.stop_training = True
@@ -158,13 +160,18 @@ def pad_rows(rows: np.ndarray, batch_size: int) -> tuple[np.ndarray, int]:
     return rows, n_real
 
 
-def configure_devices(mixed_precision: str, *batch_sizes: int) -> dict[str, Any]:
-    """Set the dtype policy and, with several GPUs, data parallelism. Returns device info.
+def configure_devices(
+    mixed_precision: str, *batch_sizes: int, data_parallel: bool = True
+) -> dict[str, Any]:
+    """Set the dtype policy and, with several GPUs and ``data_parallel``, data parallelism.
+    Returns device info.
 
-    Every ``batch_sizes`` value must divide evenly across the devices.
+    With data parallelism every ``batch_sizes`` value must divide evenly across the devices.
+    ``data_parallel=False`` uses one GPU: no cross-GPU communication (NCCL failed on the 2x T4
+    image of 2026-10, ``Cuda failure 500 'named symbol not found'``).
     """
     keras.mixed_precision.set_dtype_policy(mixed_precision)
-    devices = jax.devices()
+    devices = jax.devices() if data_parallel else jax.devices()[:1]
     for bs in batch_sizes:
         if bs % len(devices):
             raise ValueError(f"batch size {bs} is not divisible by the {len(devices)} devices")

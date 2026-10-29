@@ -1,0 +1,222 @@
+{
+  "stage": "model1_scorer",
+  "smoke": false,
+  "config": {
+    "seed": 0,
+    "max_hours": 11,
+    "min_hours_to_start": 0.25,
+    "wikitext": {
+      "hf_path": "Salesforce/wikitext",
+      "hf_config": "wikitext-103-raw-v1",
+      "revision": "b08601e04326c79dfdd32d625aee71d232d685c3"
+    },
+    "dialogsum": {
+      "hf_path": "knkarthick/dialogsum",
+      "revision": "a968e7aee0602e257935f1321a02e4287f7d5848",
+      "max_speakers": 8
+    },
+    "max_units": null,
+    "tokenizer": {
+      "vocab_size": 16000,
+      "min_frequency": 2,
+      "limit_alphabet": 1000,
+      "wordpieces_prefix": "##",
+      "max_items_per_source": null
+    },
+    "teacher": {
+      "models": {
+        "qwen7b": "Qwen/Qwen2.5-7B-Instruct-AWQ",
+        "qwen1_5b": "Qwen/Qwen2.5-1.5B-Instruct"
+      },
+      "fallback_models": {
+        "qwen7b": "Qwen/Qwen2.5-7B-Instruct",
+        "qwen1_5b": "Qwen/Qwen2.5-1.5B-Instruct"
+      },
+      "vllm_spec": "vllm",
+      "python": "3.12",
+      "temperature": 0.0,
+      "max_new_tokens": 2048,
+      "max_model_len": 6144,
+      "gpu_memory_utilization": 0.9,
+      "enable_prefix_caching": true,
+      "score_range": [
+        0,
+        10
+      ],
+      "tags": [
+        "none",
+        "key_point",
+        "decision",
+        "action_item"
+      ],
+      "splits": [
+        "train",
+        "validation",
+        "test"
+      ],
+      "train_subset": null,
+      "batch_dialogues": 256,
+      "fallback_batch_size": 8
+    },
+    "oracle": {
+      "rouge_types": [
+        "rouge1",
+        "rouge2"
+      ],
+      "max_utterances": 3,
+      "use_stemmer": true
+    },
+    "mlm": {
+      "name": "model1_mlm",
+      "seq_len": 512,
+      "corpus": {
+        "wikitext_train": 1,
+        "dialogsum_train": 5
+      },
+      "held_out": [
+        "wikitext_validation",
+        "dialogsum_validation"
+      ],
+      "mask_prob": 0.15,
+      "mask_token_frac": 0.8,
+      "random_token_frac": 0.1,
+      "optimizer": {
+        "peak_lr": 0.0005,
+        "warmup_steps": 4000,
+        "weight_decay": 0.01
+      },
+      "batch_size": 64,
+      "max_steps": null,
+      "target_hours": 3,
+      "probe_steps": 50,
+      "steps_per_epoch": 1000,
+      "mixed_precision": "mixed_float16",
+      "steps_per_execution": 32,
+      "workers": 4
+    },
+    "students": {
+      "model1_student_A": {
+        "source": "qwen7b",
+        "use_tags": true,
+        "init": "mlm",
+        "dir": "model1_student_A"
+      },
+      "model1_student_B": {
+        "source": "qwen1_5b",
+        "use_tags": true,
+        "init": "mlm",
+        "dir": "model1_student_B"
+      },
+      "model1_student_C": {
+        "source": "oracle",
+        "use_tags": false,
+        "init": "mlm",
+        "dir": "model1_student_C"
+      },
+      "model1_student_D_noMLM": {
+        "source": "qwen7b",
+        "use_tags": true,
+        "init": "random",
+        "dir": "model1_student_D"
+      },
+      "model1_student_E": {
+        "source": "oracle",
+        "tags_from": "qwen7b",
+        "use_tags": true,
+        "init": "mlm",
+        "dir": "model1_student_E"
+      }
+    },
+    "student": {
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "max_utterances": 80,
+      "loss": {
+        "listwise_lambda": 1.0,
+        "temperature": 2.0,
+        "tag_weight": 0.5,
+        "score_scale": 10
+      },
+      "optimizer": {
+        "lr_encoder": 0.0001,
+        "lr_heads": 0.001,
+        "warmup_fraction": 0.1,
+        "weight_decay": 0.01
+      },
+      "batch_size": 16,
+      "epochs": 10,
+      "max_steps": null,
+      "mixed_precision": "mixed_float16",
+      "buckets": [
+        128,
+        256,
+        384,
+        512
+      ],
+      "pool_batches": 50,
+      "early_stopping": {
+        "monitor": "val_spearman",
+        "mode": "max",
+        "patience": 3
+      }
+    },
+    "eval": {
+      "top_k": 3,
+      "reference_teacher": "qwen7b"
+    }
+  },
+  "model": {
+    "vocab_size": 16000,
+    "max_len": 512,
+    "d_model": 384,
+    "num_layers": 6,
+    "num_heads": 6,
+    "ffn_dim": 1536,
+    "dropout": 0.1,
+    "init_std": 0.02,
+    "num_speakers": 8
+  },
+  "tokenizer_sha256": "42c73d3d22eb0c30cb37d35b46e30bf402de1bb6f6a3f368fe54e4c3d165873f",
+  "teachers_complete": {
+    "qwen7b": true,
+    "qwen1_5b": true
+  },
+  "mlm_complete": true,
+  "complete_seeds": {
+    "model1_student_A": [
+      0,
+      1,
+      2
+    ],
+    "model1_student_B": [
+      0,
+      1,
+      2
+    ],
+    "model1_student_C": [
+      0,
+      1,
+      2
+    ],
+    "model1_student_D_noMLM": [
+      0,
+      1,
+      2
+    ],
+    "model1_student_E": [
+      0,
+      1,
+      2
+    ]
+  },
+  "finished_all": true,
+  "device": [
+    "cuda:0",
+    "cuda:1"
+  ],
+  "session_hours": 6.33,
+  "finished": "2026-10-13T00:36:28Z"
+}

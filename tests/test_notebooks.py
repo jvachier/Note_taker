@@ -10,6 +10,7 @@ mode (CPU, ~1-2 min each, downloads the datasets once; Model 1 uses a fake teach
 and loads its outputs with ``src/``.
 """
 
+import ast
 import inspect
 import json
 import os
@@ -19,6 +20,9 @@ from pathlib import Path
 import pytest
 
 from src.layers import embeddings, heads, transformer
+from src.model1_notes import encoder_teachers
+from src.model1_notes import losses as notes_losses
+from src.model1_notes import model as notes_model
 from src.model1_scorer import losses, mlm_model
 from src.training import LayerwiseAdamW
 
@@ -46,19 +50,45 @@ def _code(path: Path) -> str:
 
 def _init_params(code: str, name: str) -> list[str]:
     """Constructor parameter names of class ``name`` in notebook code (``[]`` if no __init__)."""
-    start = code.index(f"class {name}(")
-    end = code.find("\nclass ", start + 1)
-    body = code[start : end if end > 0 else len(code)]
-    if "def __init__(" not in body:
-        return []
-    begin = body.index("def __init__(") + len("def __init__(")
-    sig = body[begin : body.index("):", begin)]
-    params = [a.split("=")[0].strip() for a in sig.split(",")]
-    return [p for p in params if p and p not in ("self", "**kwargs")]
+    for node in ast.walk(ast.parse(code)):
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and item.name == "__init__":
+                    args = item.args
+                    return [
+                        a.arg
+                        for a in [*args.posonlyargs, *args.args, *args.kwonlyargs]
+                        if a.arg != "self"
+                    ]
+            return []
+    raise AssertionError(f"class {name} not found")
 
 
-def test_one_notebook_per_model():
-    assert [p.name for p in NOTEBOOKS] == ["model1_scorer.ipynb", "model2_cleanup.ipynb"]
+MODEL1_NOTES = (
+    notes_model.DependsOnPointer,
+    notes_model.NotesModel,
+    notes_losses.NotesImportanceLoss,
+    notes_losses.ZoneLoss,
+    LayerwiseAdamW,
+)
+MODEL1_TEACHERS = (encoder_teachers.SentenceMeanPool, encoder_teachers.SentenceBCE, LayerwiseAdamW)
+# Registered classes each notebook defines (same names and constructor arguments as src/).
+EXPECTED = {
+    "model1_notes": CORE + MODEL1_NOTES,
+    "model1_scorer": CORE + MODEL1,
+    "model1_teachers": MODEL1_TEACHERS,
+    "model2_cleanup": CORE,
+}
+
+
+def test_notebooks_per_model():
+    """Model 2 and Model 1 v1/v2 have one notebook; Model 1 v3 has two (teachers, student)."""
+    assert [p.name for p in NOTEBOOKS] == [
+        "model1_notes.ipynb",
+        "model1_scorer.ipynb",
+        "model1_teachers.ipynb",
+        "model2_cleanup.ipynb",
+    ]
 
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda p: p.stem)
@@ -87,7 +117,7 @@ def test_notebook_is_self_contained(path):
 def test_notebook_classes_match_src(path):
     """Same registered class names and constructor arguments as ``src/``."""
     code = _code(path)
-    expected = CORE + (MODEL1 if path.stem == "model1_scorer" else ())
+    expected = EXPECTED[path.stem]
     for cls in expected:
         assert f"class {cls.__name__}(" in code, cls.__name__
         params = inspect.signature(cls.__init__).parameters if "__init__" in vars(cls) else {}
@@ -109,6 +139,23 @@ def test_model1_notebook_teacher_runs_outside_jax():
         code.index("TEACHER_SCRIPT = r'''") : code.index("'''\n", code.index("TEACHER_SCRIPT"))
     ]
     assert "import jax" not in script and "import keras" not in script
+
+
+def test_model1_teachers_notebook_runs_qwen_outside_jax():
+    """Qwen runs as a subprocess (own venv) before the notebook imports JAX (CLAUDE.md)."""
+    code = _code(KAGGLE / "model1_teachers.ipynb")
+    start = code.index("TEACHER_SCRIPT = r'''")
+    assert start < code.index("subprocess.run(cmd, env=env)") < code.index("import jax")
+    script = code[start : code.index("'''\n", start)]
+    for forbidden in ("import jax", "import keras", "import tokenizers"):
+        assert forbidden not in script
+
+
+def test_model1_notes_notebook_never_loads_a_teacher():
+    """Notebook 2 trains from cached teacher outputs only (CLAUDE.md)."""
+    code = _code(KAGGLE / "model1_notes.ipynb")
+    for forbidden in ("vllm", "keras_hub", "from_pretrained", "TEACHER_SCRIPT"):
+        assert forbidden not in code
 
 
 def _execute(path: Path, tmp_path: Path) -> Path:
@@ -208,3 +255,46 @@ def test_model1_notebook_smoke_run_and_load_here(tmp_path):
     first = json.loads(preds.read_text().splitlines()[0])
     assert set(first) == {"id", "scores", "tags"}
     assert (work / "results" / "tables" / "model1_preview.md").exists()
+
+
+@RUN
+def test_model1_teachers_notebook_smoke_run_and_read_here(tmp_path):
+    import pyarrow.parquet as pq
+
+    from src.model1_notes.teacher.windows import REASONS
+
+    work = _execute(KAGGLE / "model1_teachers.ipynb", tmp_path)
+    manifest = json.loads((work / "manifest_model1_teachers.json").read_text())
+    assert manifest["qwen"]["status"] == "complete" and "passed" in manifest["qwen"]["gate"]
+    labels = work / "data" / "labels" / "model1_v3"
+    for split in ("train", "validation", "test"):
+        qwen = pq.read_table(labels / "qwen" / f"{split}.parquet").to_pylist()
+        assert qwen and {r["reason"] for r in qwen} <= set(REASONS)
+        for name in ("roberta", "distilbert"):
+            assert pq.read_table(labels / name / f"{split}.parquet").num_rows > 0
+
+
+@RUN
+def test_model1_notes_notebook_smoke_run_and_load_here(tmp_path):
+    import keras
+    import numpy as np
+
+    import src.model1_notes.losses  # noqa: F401  (registers the classes the model needs)
+    import src.model1_notes.model  # noqa: F401
+    from src.model1_notes.data import NotesSet, gather_windows
+
+    work = _execute(KAGGLE / "model1_notes.ipynb", tmp_path)
+    manifest = json.loads((work / "manifest_model1_notes.json").read_text())
+    assert manifest["complete_seeds"] == {"model1_v3_E4": [0], "model1_v3_E1": [0]}
+    test = NotesSet.load(work / "data" / "processed" / "model1_v3" / "test")
+    model = keras.saving.load_model(work / "checkpoints" / "model1_v3_E4" / "seed_0" / "best.keras")
+    batch = gather_windows(test, [0], 32)
+    out = model({"token_ids": batch["token_ids"], "speaker_ids": batch["speaker"].astype(np.int32)})
+    assert out["importance"].shape == (1, 32) and out["zone"].shape[-1] == 5
+    run = work / "results" / "model1_v3_E4" / "seed_0"
+    metrics = json.loads((run / "metrics.json").read_text())
+    assert {"synthetic", "ami", "spans"} <= set(metrics["test"])
+    assert set(metrics["zone_thresholds"]) == {"decision", "action_item"}  # zone calibration
+    first = json.loads((run / "test_predictions.jsonl").read_text().splitlines()[0])
+    assert set(first) == {"note_id", "sentence_ids", "importance", "zone"}
+    assert (work / "results" / "tables" / "model1_v3_preview.md").exists()

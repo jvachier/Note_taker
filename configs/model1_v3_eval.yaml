@@ -1,0 +1,21 @@
+name: model1_v3_eval
+description: Model 1 v3 results table (PLAN.md 10.6-10.7) from the students' and teachers' test outputs.
+seed: 0
+paths:
+  corpus_dir: data/raw/meeting_notes_v1_1
+  teacher_dir: data/labels/model1_v3        # Notebook 1 export: qwen/, roberta/, distilbert/
+  results_dir: results                      # students: results/<name>/seed_<n>/
+  checkpoints_dir: checkpoints              # students: checkpoints/<name>/seed_<n>/best.keras
+  tables_dir: results/tables
+students: [model1_v3_E1, model1_v3_ER, model1_v3_E4]
+teachers:                                   # name -> display name, parameters
+  qwen: {display: "Qwen3-0.6B (teacher)", params: 600000000}
+  roberta: {display: "RoBERTa-Large (fine-tuned, ceiling)", params: 355000000}
+  distilbert: {display: "DistilBERT (fine-tuned)", params: 66000000}
+qwen_zone_of_reason: {agreed_outcome: decision, commitment_with_owner: action_item}
+rouge:
+  use_stemmer: true
+latency:
+  sentences: [100, 500]                     # CPU latency per meeting (PLAN.md 10.7)
+  repeats: 5
+  sentence_tokens: 64                       # = model1_v3 data.max_sentence_tokens

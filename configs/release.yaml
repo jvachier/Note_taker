@@ -3,13 +3,14 @@ description: Package the best validation seed of each model in the Hugging Face 
 seed: 0
 output_dir: release        # git-ignored; one folder per Hub repo
 tokenizer_dir: data/tokenizer
-models:                    # Hub repo name -> what to package (repo names to confirm before upload)
+models:                    # Hub repo name -> what to package (both published on the Hub)
   punctuation-casing-en-7m:
     kind: cleanup
     config: configs/model2.yaml
     metric: [validation, punct, macro_f1]
     results_table: results/tables/model2_cleanup.md
-  dialogue-notes-scorer-17m:
-    kind: scorer
-    config: configs/model1_student_A.yaml
-    metric: [validation, spearman]
+  meeting-notes-en-21m:     # Model 1 v3 (PLAN.md 10): E1 (gold only), chosen on AMI validation
+    kind: notes
+    config: configs/model1_v3_E1.yaml
+    metric: [validation, ami, importance_f1]
+    results_table: results/tables/model1_v3.md

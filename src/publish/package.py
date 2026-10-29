@@ -15,7 +15,8 @@ checkpoint is re-saved without optimizer state (inference only), and
 - ``vocab.txt`` and ``results.md`` (the model's results table, if configured);
 - everything in ``src/publish/hub/<repo name>/``: the model card (``README.md``), a
   self-contained ``modeling.py`` (custom layers + inference, no dependency on this repo) and
-  ``example.py``.
+  ``example.py``. Their ``<hf-user>`` placeholder becomes ``$HF_NAMESPACE``, the Hub account
+  (the repository itself never names it).
 
 The demo app (``app/``) reads this same layout from a local folder or from the Hub.
 """
@@ -26,24 +27,34 @@ import argparse
 import hashlib
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Any
 
 import keras
 
+import src.model1_notes.losses  # noqa: F401  (registers the custom objects for loading)
+import src.model1_notes.model  # noqa: F401
 import src.model1_scorer.model  # noqa: F401  (registers the custom layers for loading)
 import src.model2_cleanup.model  # noqa: F401
 from src.config import load_config
 from src.eval.human_eval import best_seed
 
 log = logging.getLogger(__name__)
+NAMESPACE_PLACEHOLDER = "<hf-user>"
 FORMAT_VERSION = 1
 HUB_DIR = Path(__file__).parent / "hub"  # per-repo files uploaded as they are
 
 
-def inference_settings(kind: str, run_cfg: dict[str, Any]) -> dict[str, Any]:
-    """Settings the app needs to run the model like the evaluation did."""
+def inference_settings(
+    kind: str, run_cfg: dict[str, Any], metrics: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Settings the app needs to run the model like the evaluation did.
+
+    For ``notes`` (Model 1 v3) they include the seed's validation-tuned selection threshold and
+    calibrated zone thresholds, read from its ``metrics.json``.
+    """
     if kind == "cleanup":
         return {
             "window_words": run_cfg["data"]["window_words"],
@@ -51,11 +62,35 @@ def inference_settings(kind: str, run_cfg: dict[str, Any]) -> dict[str, Any]:
         }
     if kind == "scorer":
         return {"max_len": run_cfg["model"]["max_len"], "top_k": run_cfg["inference"]["top_k"]}
+    if kind == "notes":
+        metrics = metrics or {}
+        return {
+            "max_sentence_tokens": run_cfg["data"]["max_sentence_tokens"],
+            "window_overlap": run_cfg["data"]["window_overlap"],
+            "threshold": metrics.get("threshold", 0.5),
+            "zone_thresholds": metrics.get("zone_thresholds"),
+            "postprocess": run_cfg["inference"].get("postprocess"),
+        }
     raise ValueError(f"unknown model kind: {kind}")
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def fill_namespace(folder: Path, namespace: str | None) -> None:
+    """Replace the ``<hf-user>`` placeholder of the hand-written Hub files with ``namespace``.
+
+    The repository never names the Hub account; the release step reads it from
+    ``HF_NAMESPACE``. Without it the placeholder stays and a warning is logged.
+    """
+    for path in sorted(folder.glob("*")):
+        if path.suffix not in (".md", ".py") or NAMESPACE_PLACEHOLDER not in path.read_text():
+            continue
+        if not namespace:
+            log.warning("%s keeps %s: set HF_NAMESPACE", path, NAMESPACE_PLACEHOLDER)
+            continue
+        path.write_text(path.read_text().replace(NAMESPACE_PLACEHOLDER, namespace))
 
 
 def package_model(repo: str, entry: dict[str, Any], tokenizer_dir: Path, output_dir: Path) -> Path:
@@ -71,6 +106,8 @@ def package_model(repo: str, entry: dict[str, Any], tokenizer_dir: Path, output_
         if expected and expected != sha256(tokenizer):
             raise ValueError(f"{tokenizer} is not the tokenizer {run_cfg['name']} was trained with")
 
+    metrics_path = results_dir / run_cfg["name"] / f"seed_{seed}" / "metrics.json"
+    metrics = json.loads(metrics_path.read_text()) if metrics_path.exists() else None
     out = output_dir / repo
     out.mkdir(parents=True, exist_ok=True)
     model = keras.saving.load_model(ckpt, compile=False)  # drops the optimizer state
@@ -83,13 +120,14 @@ def package_model(repo: str, entry: dict[str, Any], tokenizer_dir: Path, output_
         shutil.copytree(
             hub_files, out, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__")
         )
+        fill_namespace(out, os.environ.get("HF_NAMESPACE"))
     if entry.get("results_table"):
         shutil.copyfile(entry["results_table"], out / "results.md")
     config = {
         "format_version": FORMAT_VERSION,
         "kind": entry["kind"],
         "architecture": run_cfg["model"],
-        "inference": inference_settings(entry["kind"], run_cfg),
+        "inference": inference_settings(entry["kind"], run_cfg, metrics),
         "source": {
             "run": run_cfg["name"],
             "seed": seed,

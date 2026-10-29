@@ -71,6 +71,22 @@ def test_time_guard_stops_when_next_epoch_would_overrun():
     assert guard.stopped and guard.model.stop_training
 
 
+def test_time_guard_never_flags_the_last_epoch():
+    """Training ends after the last epoch anyway: a complete run is not "interrupted"."""
+    guard = TimeGuard(max_hours=1.0, session_start=time.time() - 3500)
+    guard.set_model(_Model())
+    guard.set_params({"epochs": 3})
+    guard.on_train_begin()
+    guard.on_epoch_begin(2)
+    guard._epoch_start -= 200
+    guard.on_epoch_end(2)
+    assert not guard.stopped
+    guard.on_epoch_begin(1)  # the same overrun one epoch earlier does stop
+    guard._epoch_start -= 200
+    guard.on_epoch_end(1)
+    assert guard.stopped
+
+
 def test_time_guard_lets_short_runs_continue():
     guard = TimeGuard(max_hours=1.0)
     guard.set_model(_Model())
@@ -148,3 +164,13 @@ def test_time_guard_hard_limit_fires_on_any_batch_index():
     guard.on_train_begin()
     guard.on_train_batch_end(31)
     assert guard.stopped and guard.model.stop_training
+
+
+def test_configure_devices_single_gpu_skips_data_parallel():
+    import keras
+
+    from src.training import configure_devices
+
+    info = configure_devices("float32", 3, data_parallel=False)  # 3 would not split over 2 GPUs
+    assert len(info["devices"]) == 1
+    assert keras.distribution.distribution() is None

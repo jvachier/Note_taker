@@ -229,8 +229,25 @@ __marimo__/
 *.keras
 *.weights.h5
 claude-code-setup.zip
+# Credentials: never in the repo (Kaggle CLI reads ~/.kaggle/kaggle.json, the Hub reads HF_TOKEN)
+kaggle.json
+.kaggle/
 .claude/settings.local.json
-results_notebook2/
-results_notebook1/
-results/
-results_student_e/
+# Local Kaggle downloads (fetch_outputs.py copies what is needed into checkpoints/, data/, results/)
+/results_*/
+# results/: per-seed predictions and reports stay local; the tables, metrics, manifests and
+# histories behind the published models are tracked.
+/results/*
+!/results/tables/
+!/results/kaggle/
+!/results/data/
+!/results/tokenizer/
+!/results/model2_cleanup/
+!/results/model1_v3_E1/
+!/results/model1_v3_E4/
+!/results/model1_v3_eval.json
+/results/**/test_predictions.jsonl
+/results/**/*.DS_Store
+/results/tables/model1.md
+/results/tables/model1_preview.md
+/results/tables/model1_v1.md

@@ -1,0 +1,97 @@
+{
+  "seed": 1,
+  "params": 20947605,
+  "threshold": 0.45,
+  "zone_thresholds": {
+    "decision": 0.195,
+    "action_item": 0.355
+  },
+  "validation": {
+    "all": {
+      "sentences": 31432,
+      "importance_f1": 0.7523,
+      "pr_auc": 0.8369,
+      "zone_macro_f1": 0.618,
+      "decision_f1": 0.5675,
+      "action_f1": 0.8532,
+      "hard_negative_fp": 0.0909
+    },
+    "synthetic": {
+      "sentences": 12721,
+      "importance_f1": 0.8848,
+      "pr_auc": 0.9371,
+      "zone_macro_f1": 0.7073,
+      "decision_f1": 0.7877,
+      "action_f1": 0.8843,
+      "hard_negative_fp": null
+    },
+    "synthetic_hn": {
+      "sentences": 2235,
+      "importance_f1": 0.8549,
+      "pr_auc": 0.9305,
+      "zone_macro_f1": 0.7175,
+      "decision_f1": 0.776,
+      "action_f1": 0.906,
+      "hard_negative_fp": 0.0909
+    },
+    "ami": {
+      "sentences": 16476,
+      "importance_f1": 0.5725,
+      "pr_auc": 0.5866,
+      "zone_macro_f1": 0.3619,
+      "decision_f1": 0.1192,
+      "action_f1": 0.0278,
+      "hard_negative_fp": null
+    },
+    "spans": {
+      "owner_f1": 0.7835,
+      "deadline_f1": 0.9119,
+      "span_f1": 0.8419,
+      "gold_spans": 1542
+    }
+  },
+  "test": {
+    "all": {
+      "sentences": 30730,
+      "importance_f1": 0.7429,
+      "pr_auc": 0.8063,
+      "zone_macro_f1": 0.5993,
+      "decision_f1": 0.4199,
+      "action_f1": 0.9177,
+      "hard_negative_fp": 0.195
+    },
+    "synthetic": {
+      "sentences": 12488,
+      "importance_f1": 0.8891,
+      "pr_auc": 0.8852,
+      "zone_macro_f1": 0.6992,
+      "decision_f1": 0.6304,
+      "action_f1": 0.9502,
+      "hard_negative_fp": null
+    },
+    "synthetic_hn": {
+      "sentences": 2366,
+      "importance_f1": 0.8448,
+      "pr_auc": 0.8671,
+      "zone_macro_f1": 0.6794,
+      "decision_f1": 0.5929,
+      "action_f1": 0.9224,
+      "hard_negative_fp": 0.195
+    },
+    "ami": {
+      "sentences": 15876,
+      "importance_f1": 0.5753,
+      "pr_auc": 0.5708,
+      "zone_macro_f1": 0.3489,
+      "decision_f1": 0.1183,
+      "action_f1": 0.0,
+      "hard_negative_fp": null
+    },
+    "spans": {
+      "owner_f1": 0.8406,
+      "deadline_f1": 0.9378,
+      "span_f1": 0.8866,
+      "gold_spans": 1671
+    }
+  }
+}

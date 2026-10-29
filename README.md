@@ -1,89 +1,173 @@
 # Note_taker
 
-Two small transformer models built from scratch with Keras 3 (JAX backend):
+![Python 3.11 | 3.12](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?logo=python&logoColor=white)
+![Keras 3](https://img.shields.io/badge/Keras-3-D00000?logo=keras&logoColor=white)
+![JAX backend](https://img.shields.io/badge/backend-JAX-A8B9CC)
+![Built from scratch](https://img.shields.io/badge/weights-from%20scratch-2a78d6)
+![Hugging Face models](https://img.shields.io/badge/%F0%9F%A4%97%20models-2-FFD21E)
+![Dash demo](https://img.shields.io/badge/demo-Dash-008DE4?logo=plotly&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
+![Code licence: MIT](https://img.shields.io/badge/code%20licence-MIT-green)
+![Model licence: CC BY-NC-SA 4.0](https://img.shields.io/badge/model%20licence-CC%20BY--NC--SA%204.0-lightgrey)
+![Ruff](https://img.shields.io/badge/code%20style-ruff-D7FF64?logo=ruff&logoColor=black)
 
-- **Model 2 – Cleanup**: restores punctuation and casing in noisy lowercase text.
-- **Model 1 – Utterance scorer**: extractive dialogue notes, distilled from Qwen teachers.
+**Topics:** `keras` · `jax` · `transformers-from-scratch` · `meeting-notes` ·
+`extractive-summarization` · `action-items` · `punctuation-restoration` · `truecasing` ·
+`speech-to-text` · `knowledge-distillation` · `hugging-face` · `dash`
 
-See [PLAN.md](PLAN.md) for the full design.
+Two small transformer models, **built from scratch** with Keras 3 on the JAX backend (own
+WordPiece tokenizer, own architectures, no pretrained weights), and a demo app that chains them:
 
-```bash
-uv sync                    # training/dev environment (no PyTorch, no TensorFlow)
-uv sync --extra eval       # + BERTScore (pulls PyTorch; evaluation only)
-uv run pytest -q
-uv run ruff check . --fix && uv run ruff format .
-```
+| Model | What it does | Size | Hugging Face |
+|---|---|---|---|
+| **Model 2 – Cleanup** | Restores punctuation and casing in lowercase speech-to-text output | 7.3M params, 29 MB | `<hf-user>/punctuation-casing-en-7m` |
+| **Model 1 – Meeting notes** | Picks the sentences of a meeting that matter and sorts them into decisions, action items (owner, deadline) and key points | 20.9M params, 84 MB | `<hf-user>/meeting-notes-en-21m` |
 
-Pipeline stages (local; outputs under the git-ignored `data/`):
+Both run on CPU. Headline results (test sets, mean ± std over 3 seeds):
+- **Cleanup:** punctuation macro-F1 0.789 ± 0.001 and casing accuracy 0.965 on DialogSum
+  ([table](results/tables/model2_cleanup.md)).
+- **Meeting notes:** importance F1 0.578 ± 0.006 on real AMI meetings, on par with a fine-tuned
+  DistilBERT (0.580, 3× larger) and below RoBERTa-Large (0.634, 17× larger)
+  ([table](results/tables/model1_v3.md)). Model 1 is extractive: it selects sentences, it does
+  not write new text.
 
-```bash
-uv run python -m src.data.download --config configs/data.yaml        # Stage 2: data + splits
-uv run python -m src.tokenizer.train --config configs/tokenizer.yaml # Stage 3: WordPiece
-uv run python -m src.model2_cleanup.build_data --config configs/model2.yaml   # Stage 4a: arrays
-uv run python -m src.model2_cleanup.train --config configs/model2.yaml --all-seeds  # Stage 4b
-uv run python -m src.eval.aggregate --exp model2_cleanup                     # results table
-uv run python -m src.model1_scorer.mlm_data --config configs/mlm.yaml          # Stage 5a: MLM arrays
-uv run python -m src.model1_scorer.mlm_train --config configs/mlm.yaml         # Stage 5b: pretrain
-uv run python -m src.model1_scorer.oracle --config configs/oracle.yaml         # Stage 6b: oracle labels
-uv run python -m src.model1_scorer.data --config configs/model1_student_A.yaml # Stage 7a: student arrays
-uv run python -m src.model1_scorer.train --config configs/model1_student_A.yaml --all-seeds  # 7b (A-D)
-uv run --extra eval python -m src.model1_scorer.evaluate --config configs/model1_eval.yaml  # 7c: table
-```
+`<hf-user>` stands for the Hugging Face account that hosts the models. The model cards there
+describe the data, training, limitations and licences.
+[PLAN.md](PLAN.md) is the full design and the log of every decision.
 
-Teacher labels (Stage 6a) are produced on Kaggle only, in a vLLM environment:
-`python -m src.model1_scorer.teacher.label --config configs/teacher.yaml --teacher qwen14b`.
-
-Smoke tests (CPU, < 2 min): the Model 2 commands with `configs/model2_tiny.yaml`, the MLM
-commands with `configs/mlm_tiny.yaml`, the student commands with
-`configs/model1_student_tiny.yaml` (trains on oracle labels, since teacher labels exist only on
-Kaggle).
-Full runs happen on Kaggle with one self-contained notebook per model (upload it, GPU T4 x2,
-Internet on, Run All; attach its previous output to resume). They do not use this repo's code.
-- `notebooks/kaggle/model2_cleanup.ipynb`: data, tokenizer, training, evaluation (1 session).
-- `notebooks/kaggle/model1_scorer.ipynb`: data, teacher labels (own vLLM environment), oracle,
-  MLM pretraining, students A-D, preview table (2-3 sessions). Attach the Model 2 output too so
-  both models share the exact same tokenizer file.
-
-Bring the outputs back with `uv run python notebooks/kaggle/fetch_outputs.py <notebook>`, then
-for Model 1 build the local test arrays and run the full evaluation (BERTScore, CPU latency):
-`uv run python -m src.model1_scorer.data --config configs/model1_student_A.yaml` and
-`uv run --extra eval python -m src.model1_scorer.evaluate --config configs/model1_eval.yaml`.
-
-Configs live in `configs/`. A config can inherit from another with `base: <file>.yaml`;
-`src.config.load_config` returns the fully resolved dict.
-
-## Results report
+## Use the models
 
 ```bash
-uv run python -m src.eval.report    # -> results/report/index.html (interactive, offline)
+pip install "keras>=3.6" jax tokenizers huggingface_hub
 ```
 
-Every figure comes with what it shows and a good / mixed / poor verdict computed from the
-numbers (thresholds in `configs/report.yaml`).
+```python
+import sys
+from huggingface_hub import snapshot_download
 
-## Release and demo app
+folder = snapshot_download("<hf-user>/meeting-notes-en-21m")
+sys.path.insert(0, folder)
+import modeling  # the model's own code, shipped in the repo
+
+notetaker = modeling.NoteTaker.from_folder(folder)
+print(
+    notetaker("Anna: Then let's launch on the 15th.\nBen: Okay, I'll send an update on Wednesday.")
+)
+```
+
+Each Hub repo has an `example.py`. For raw transcripts, the meeting-notes example first runs the
+cleanup model.
+
+## Demo app
+
+A Dash app with both models: punctuation restoration, and meeting notes from a transcript (one
+`Name: text` line per turn), with a chart of every sentence's importance.
 
 ```bash
-uv run python -m src.publish.package   # best validation seed of each model -> release/<repo>/
+export HF_NAMESPACE=<hf-user>    # the Hub account hosting the models (or put it in a .env file)
+docker compose up --build        # open http://localhost:8050
 ```
 
-Each `release/<repo>/` folder (`model.keras` without optimizer state, `tokenizer.json`,
-`config.json`) is what gets uploaded to the Hugging Face Hub, and what the demo app loads.
+Without Docker: `uv sync --extra app`, then `uv run python -m app.main`. Models load from
+`./release/` if present (see [Release](#release)), else from the Hub repos
+`$HF_NAMESPACE/punctuation-casing-en-7m` and `$HF_NAMESPACE/meeting-notes-en-21m`.
+`MODEL2_SOURCE` and `MODEL1_SOURCE` override either one with a local folder or a Hub repo ID,
+and `MODEL_REVISION` pins a Hub branch, tag or commit. In Docker, gunicorn serves the app (one worker, four threads),
+and inputs are capped at 20,000 characters per request.
 
-Run the demo (Dash: punctuation restoration + dialogue notes) with Docker:
+## Development
 
 ```bash
-docker compose up --build                       # models from the Hugging Face Hub
-MODEL2_SOURCE=/models/punctuation-casing-en-7m \
-MODEL1_SOURCE=/models/dialogue-notes-scorer-17m \
-docker compose up --build                       # or the local ./release folders
+uv sync                                          # dev environment (no PyTorch, no TensorFlow)
+uv run pytest -q                                 # tests
+uv run ruff check . --fix && uv run ruff format . # lint and format
+uv run pre-commit install                        # run the same checks before every commit
 ```
 
-then open http://localhost:8050. Without Docker: `uv run --extra app python -m app.main` (uses
-`./release` if present, else the Hub; override with `MODEL2_SOURCE` / `MODEL1_SOURCE`).
+CI ([`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) runs `pre-commit run --all-files`
+on every pull request and push to `main`: YAML/TOML checks, a large-file guard, ruff, ruff
+format and pytest. The Kaggle notebooks are executed end to end only with `RUN_NOTEBOOKS=1`.
 
-## CI
+Every hyperparameter lives in [`configs/`](configs/). A config can inherit from another with
+`base: <file>.yaml`; `src.config.load_config` returns the resolved dict. Data, checkpoints and
+release folders are git-ignored. The result tables, metrics and run manifests behind the
+published models are tracked in [`results/`](results/).
 
-`.github/workflows/ci.yaml` runs `pre-commit run --all-files` (YAML/TOML checks, large-file
-guard, ruff, ruff format, pytest) on every pull request and push to `main`, and checks that the
-Docker image builds. Install the hooks locally with `uv run pre-commit install`.
+## Reproduce
+
+Full training runs on Kaggle GPUs, with self-contained notebooks in
+[`notebooks/kaggle/`](notebooks/kaggle/) that checkpoint and resume. They do not import this
+repo's code. Tests check that the notebooks' classes match `src/`. Bring a notebook's outputs
+back with `uv run python notebooks/kaggle/fetch_outputs.py <notebook>`. Smoke configs
+(`configs/*_tiny.yaml`) run each stage on CPU in under two minutes.
+
+**Model 2 – Cleanup** (notebook `model2_cleanup.ipynb`, one session):
+
+```bash
+uv run python -m src.data.download --config configs/data.yaml                  # WikiText-103 + DialogSum
+uv run python -m src.tokenizer.train --config configs/tokenizer.yaml           # WordPiece, 16k
+uv run python -m src.model2_cleanup.build_data --config configs/model2.yaml    # int32 arrays
+uv run python -m src.model2_cleanup.train --config configs/model2.yaml --all-seeds
+uv run python -m src.eval.aggregate --exp model2_cleanup                       # results table
+```
+
+**Model 1 – Meeting notes, v3** (PLAN.md §10). Training data is the gold-labelled corpus
+`meeting-notes-extractive-v1` (built in the companion repository `meeting-notes-extractive-corpus`)
+(v1.1, in `data/raw/meeting_notes_v1_1/`). The sentence encoder starts from the MLM checkpoint
+`checkpoints/mlm/encoder.keras` (`notebooks/kaggle/model1_scorer.ipynb`).
+1. `model1_teachers.ipynb`: teacher and baseline outputs (Qwen3-0.6B, fine-tuned RoBERTa-Large
+   and DistilBERT), cached as Parquet. Only needed for the distillation run E4 and the baseline
+   rows.
+2. `model1_notes.ipynb`: the students E1 (gold only, released) and E4 (gold + teachers),
+   3 seeds each.
+
+```bash
+uv run python -m src.model1_notes.data --config configs/model1_v3.yaml                    # arrays
+uv run python -m src.model1_notes.train --config configs/model1_v3_E1.yaml --all-seeds    # (Kaggle)
+uv run python -m src.model1_notes.calibrate --config configs/model1_v3_E1.yaml --seed 1   # re-tune zones
+uv run python -m src.model1_notes.evaluate --config configs/model1_v3_eval.yaml --latency # results table
+```
+
+`uv run python -m src.eval.report` writes an interactive HTML report to
+`results/report/index.html`. It covers Model 2 and the v1/v2 scorer; Model 1 v3 results are in
+the tables above.
+
+## Release
+
+```bash
+uv run python -m src.publish.package    # best validation seed of each model -> release/<repo>/
+```
+
+Each `release/<repo>/` folder is what is uploaded to the Hub: `model.keras` (no optimizer
+state), the tokenizer, `config.json` (architecture, tuned thresholds, inference rules, source run
+and seed), `results.md`, and the hand-written model card, `modeling.py` and `example.py` from
+[`src/publish/hub/`](src/publish/hub/). Those files say `<hf-user>`; packaging replaces it with
+`$HF_NAMESPACE`, so set it before packaging a release for upload.
+
+## Repository layout
+
+```
+app/                 Dash demo (loads the released models)
+configs/             one YAML per run; *_tiny.yaml = CPU smoke runs
+notebooks/kaggle/    self-contained Kaggle notebooks + fetch_outputs.py
+src/data/            dataset download and splits (WikiText-103, DialogSum)
+src/tokenizer/       WordPiece tokenizer
+src/layers/          shared Keras layers (pre-LN transformer, embeddings)
+src/model2_cleanup/  Model 2
+src/model1_notes/    Model 1 v3 (current): data, model, training, calibration, notes, teachers
+src/model1_scorer/   Model 1 v1/v2 (DialogSum utterance scorer, superseded; also the MLM encoder)
+src/eval/            metrics, results tables, HTML report
+src/publish/         release packaging and Hub files
+results/             tracked tables, metrics and manifests
+tests/               pytest suite
+```
+
+## Contributing, security and licence
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): ground rules, setup and the checks a pull request must pass.
+- [SECURITY.md](SECURITY.md): how to report a vulnerability privately.
+- **Code:** MIT ([LICENSE](LICENSE)).
+- **Published models:** CC BY-NC-SA 4.0 (non-commercial), because they are trained on DialogSum.
+  See the model cards.
+- The Claude Code skills used to build this project are in [`.claude/skills/`](.claude/skills/).
+  Each has an `explanations.md`.

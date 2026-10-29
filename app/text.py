@@ -7,8 +7,19 @@ from dataclasses import dataclass
 
 from src.model2_cleanup.infer import input_words
 
-MAX_SPEAKERS = 8  # the speaker embedding of Model 1
+MAX_SPEAKERS = 8  # the speaker embedding of Model 1 (more speakers share the last ID in v3)
+# Longest input the demo accepts (about 3,000 words, a one-hour meeting is ~9,000): keeps one
+# request to a few seconds of CPU so it cannot block the single server worker.
+MAX_CHARS = 20_000
 _SPEAKER = re.compile(r"^\s*([^:]{1,40}?)\s*:\s*(.+)$")
+
+
+def check_length(text: str) -> None:
+    """Raise ``ValueError`` if ``text`` is longer than :data:`MAX_CHARS`."""
+    if len(text) > MAX_CHARS:
+        raise ValueError(
+            f"The text is {len(text):,} characters long; the demo accepts up to {MAX_CHARS:,}."
+        )
 
 
 @dataclass
@@ -31,8 +42,10 @@ def parse_dialogue(text: str) -> Dialogue:
     continues the previous speaker's turn as a new utterance (or speaker 1 at the start).
 
     Raises:
-        ValueError: no utterance, or more than :data:`MAX_SPEAKERS` speakers.
+        ValueError: no utterance, more than :data:`MAX_SPEAKERS` speakers or more than
+            :data:`MAX_CHARS` characters.
     """
+    check_length(text)
     names: list[str] = []
     speakers: list[int] = []
     utterances: list[str] = []
@@ -56,6 +69,26 @@ def parse_dialogue(text: str) -> Dialogue:
     if len(names) > MAX_SPEAKERS:
         raise ValueError(f"At most {MAX_SPEAKERS} speakers are supported, found {len(names)}.")
     return Dialogue(speakers, names, utterances)
+
+
+# A new sentence starts with a capital, digit or quote: "the rent. increase, too." (a period
+# Model 2 put inside a phrase) stays one sentence.
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])")
+
+
+def split_sentences(text: str) -> list[str]:
+    """Split a turn into sentences after ``.``, ``!`` or ``?`` (Model 1 v3 scores sentences)."""
+    return [s.strip() for s in _SENTENCE_END.split(text.strip()) if s.strip()]
+
+
+def meeting_sentences(dialogue: Dialogue) -> tuple[list[str], list[str]]:
+    """Speaker name and text of every sentence of ``dialogue``, in order."""
+    speakers, sentences = [], []
+    for i, utterance in enumerate(dialogue.utterances):
+        for sentence in split_sentences(utterance) or [utterance]:
+            speakers.append(dialogue.name(i))
+            sentences.append(sentence)
+    return speakers, sentences
 
 
 def changed_words(text: str, cleaned: str) -> list[tuple[str, bool]]:

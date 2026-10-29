@@ -1,0 +1,7 @@
+base: model1_v3.yaml
+name: model1_v3_E4
+description: Main run - gold labels + Qwen3-0.6B (scores, reasons, links) + RoBERTa-Large KL (PLAN.md 10.5).
+seeds: [0]                 # 1 seed first (2026-10-25); add 1, 2 for the best run
+paths:
+  output_dir: checkpoints/model1_v3_E4
+teachers: [qwen, roberta]

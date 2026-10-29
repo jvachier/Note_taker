@@ -18,25 +18,41 @@ os.environ.setdefault("KERAS_BACKEND", "jax")
 import keras  # noqa: E402
 from tokenizers import Tokenizer  # noqa: E402
 
-from src.model1_scorer.infer import ScoredDialogue, score_dialogue  # noqa: E402
+import src.model1_notes.losses  # noqa: E402,F401  (registers the custom objects)
+import src.model1_notes.model  # noqa: E402,F401
+import src.model2_cleanup.model  # noqa: E402,F401
+from src.model1_notes.notes import Note, annotate  # noqa: E402
 from src.model2_cleanup.infer import clean_text  # noqa: E402
 
 FILES = ["model.keras", "tokenizer.json", "config.json"]
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # Used when the environment variable is not set: the local release folder written by
-# `python -m src.publish.package` if it exists, else the Hugging Face Hub repo.
+# `python -m src.publish.package` if it exists, else the Hub repo `$HF_NAMESPACE/<name>`.
 DEFAULT_SOURCES = {
-    "MODEL2_SOURCE": ("release/punctuation-casing-en-7m", "Jvachier/punctuation-casing-en-7m"),
-    "MODEL1_SOURCE": ("release/dialogue-notes-scorer-17m", "Jvachier/dialogue-notes-scorer-17m"),
+    "MODEL2_SOURCE": "punctuation-casing-en-7m",
+    "MODEL1_SOURCE": "meeting-notes-en-21m",
 }
 
 
 def source_from_env(variable: str) -> str:
-    """``$variable`` if set, else the local release folder if present, else the Hub repo."""
+    """``$variable`` if set, else the local release folder if present, else the Hub repo
+    ``$HF_NAMESPACE/<name>``.
+
+    Raises:
+        ValueError: none of the three is available.
+    """
     if value := os.environ.get(variable):
         return value
-    local, hub = DEFAULT_SOURCES[variable]
-    return str(REPO_ROOT / local) if (REPO_ROOT / local).is_dir() else hub
+    name = DEFAULT_SOURCES[variable]
+    if (REPO_ROOT / "release" / name).is_dir():
+        return str(REPO_ROOT / "release" / name)
+    if namespace := os.environ.get("HF_NAMESPACE"):
+        return f"{namespace}/{name}"
+    raise ValueError(
+        f"No model for {variable}: set it to a folder or a Hub repo ID, set HF_NAMESPACE "
+        f"(the Hub user or organisation that hosts {name}), or build release/{name} with "
+        "`python -m src.publish.package`."
+    )
 
 
 def resolve(source: str, revision: str | None = None) -> Path:
@@ -74,11 +90,11 @@ class Bundle:
 
 
 class Models:
-    """Model 2 (cleanup) and Model 1 (notes scorer), ready for raw text."""
+    """Model 2 (cleanup) and Model 1 v3 (meeting notes), ready for raw text."""
 
-    def __init__(self, cleanup: Bundle, scorer: Bundle) -> None:
+    def __init__(self, cleanup: Bundle, notes: Bundle) -> None:
         self.cleanup = cleanup
-        self.scorer = scorer
+        self.notes = notes
 
     @classmethod
     def from_env(cls) -> Models:
@@ -86,7 +102,7 @@ class Models:
         revision = os.environ.get("MODEL_REVISION") or None
         return cls(
             Bundle.load(source_from_env("MODEL2_SOURCE"), "cleanup", revision),
-            Bundle.load(source_from_env("MODEL1_SOURCE"), "scorer", revision),
+            Bundle.load(source_from_env("MODEL1_SOURCE"), "notes", revision),
         )
 
     def clean(self, text: str) -> tuple[str, float]:
@@ -102,16 +118,15 @@ class Models:
         )
         return out, (time.perf_counter() - start) * 1000
 
-    def score(self, speakers: list[int], utterances: list[str]) -> tuple[ScoredDialogue, float]:
-        """Importance, tag and top-k selection per utterance, and the time it took (ms)."""
-        settings = self.scorer.config["inference"]
+    def annotate(
+        self, speakers: list[str], sentences: list[str], threshold: float | None = None
+    ) -> tuple[list[Note], float]:
+        """Every sentence with its importance, zone, kept flag and owner / deadline (ms).
+
+        ``threshold`` overrides the released keep threshold (the app's slider)."""
+        settings = dict(self.notes.config["inference"])
+        if threshold is not None:
+            settings["threshold"] = threshold
         start = time.perf_counter()
-        scored = score_dialogue(
-            self.scorer.model,
-            self.scorer.tokenizer,
-            speakers,
-            utterances,
-            settings["max_len"],
-            settings["top_k"],
-        )
-        return scored, (time.perf_counter() - start) * 1000
+        notes = annotate(self.notes.model, self.notes.tokenizer, speakers, sentences, settings)
+        return notes, (time.perf_counter() - start) * 1000

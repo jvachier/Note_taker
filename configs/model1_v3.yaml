@@ -1,0 +1,119 @@
+name: model1_v3
+description: Model 1 v3 shared settings (PLAN.md section 10). E4 / E1 / tiny configs inherit from this.
+seeds: [0, 1, 2]
+max_hours: 10
+paths:
+  corpus_dir: data/raw/meeting_notes_v1_1   # corpus v1.1 (release layout: data/{synthetic,ami}/...)
+  tokenizer_dir: data/tokenizer
+  processed_dir: data/processed/model1_v3
+  teacher_dir: data/labels/model1_v3        # Notebook 1 outputs (step 3-4)
+  init_checkpoint: checkpoints/mlm/encoder.keras
+  output_dir: checkpoints/model1_v3
+  results_dir: results
+corpus:
+  revision: v1.1
+  text_field: sentence_text                 # sentence_text | sentence_text_asr (§10.2)
+  sources: [synthetic, synthetic_hn, ami]   # rows kept from the corpus
+data:
+  max_sentence_tokens: 64                   # [CLS] + subwords + [SEP]
+  max_sentences: 256                        # sentences per window (meeting encoder length)
+  window_overlap: 64                        # sentences shared by consecutive windows
+  max_meetings: null                        # cap per split (smoke runs only)
+  sentence_buckets: [32, 64, 128, 256]      # static batch shapes (sentences per window)
+  hard_negative_oversample: 2               # synthetic_hn windows repeated per epoch (train)
+model:
+  vocab_size: 16000
+  d_model: 384
+  num_layers: 6                             # sentence encoder (= MLM encoder)
+  meeting_layers: 2
+  num_heads: 6
+  ffn_dim: 1536
+  max_len: 512                              # MLM encoder positions (first 64 used)
+  num_speakers: 8
+  dropout: 0.1
+  init_std: 0.02
+  num_zones: 5
+  num_reasons: 9
+  num_span_tags: 5                          # O, B/I-owner, B/I-deadline
+loss:
+  importance: 1.0
+  zone: 0.5
+  spans: 0.3
+  qwen_kl: 0.5
+  roberta_kl: 0.5
+  reason: 0.3
+  depends_on: 0.3
+  temperature: 2.0
+  zone_class_weights: inverse_sqrt
+optimizer:
+  name: adamw
+  lr_sentence_encoder: 1.0e-4
+  lr_meeting: 5.0e-4                        # meeting encoder + heads
+  warmup_fraction: 0.1
+  schedule: cosine
+  weight_decay: 0.01
+training:
+  sentences_per_batch: 2048                 # per step: 64 windows of <=32 ... 8 windows of 256
+  epochs: 15
+  max_steps: null
+  mixed_precision: mixed_float16
+  data_parallel: false                      # one T4: NCCL across 2x T4 failed on Kaggle (2026-10)
+  early_stopping:
+    monitor: val_loss
+    mode: min
+    patience: 2
+inference:
+  threshold: null                           # tuned on validation (§10.1)
+  zone_calibration: balanced                 # mean of AMI and synthetic validation F1 (ami | all | balanced | null)
+  zone_threshold_grid: [0.005, 0.5, 0.005]  # start, stop, step (numpy arange); AMI p(action) ~0.01
+  postprocess:                              # src/model1_notes/postprocess.py (presentation only)
+    confirmation_max_words: 12
+    lookback: 3                             # sentences searched back for the request a reply answers
+    commitment_patterns: ["\\bi(?:'ll| will| can| am going to|'m going to| shall)\\b", "\\blet me\\b"]
+    confirmation_patterns: ["^\\W*(yes|yeah|yep|ok|okay|sure|fine|agreed|will do|sounds good|that works|deal)\\b"]
+baselines:                                  # PLAN.md 10.6 (untrained rows; also the Qwen gate)
+  lead_fractions: [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]
+  keywords:
+    decision: ["\\b(we|we've|we have) (decided|agreed)\\b", "\\bdecision\\b", "\\blet's go with\\b",
+               "\\b(we'll|we will) go (with|for)\\b", "\\bagreed\\b", "\\bfinal answer\\b"]
+    action: ["\\b(\\w+ will|i'll|you'll|he'll|she'll|they'll|we'll) (send|do|take|check|write|prepare|follow|set|book|draft|update|look|fix|call|share|finish)\\b",
+             "\\baction item\\b", "\\bby (monday|tuesday|wednesday|thursday|friday|tomorrow|end of (the )?(day|week|sprint))\\b",
+             "\\bcan you (send|check|take|prepare|update|look)\\b"]
+teacher:                                    # Notebook 1, Qwen (PLAN.md 10.3); own vLLM venv
+  model: Qwen/Qwen3-0.6B                    # the smallest Qwen3 (4B ran at ~40 tok/s on T4)
+  fallback_model: Qwen/Qwen3-1.7B           # if 0.6B fails the quality gate
+  vllm_spec: vllm==0.31.0                   # as for the v2 labels
+  python: "3.12"
+  splits: [validation, test, train]         # validation first: the gate needs it
+  max_train_meetings: 400                   # synthetic train subset
+  max_ami_train_meetings: 30                # AMI train subset (AMI meetings are ~16 windows each)
+  window_sentences: 64
+  window_overlap: 16
+  batch_meetings: 64
+  think_temperature: 0.6                    # Qwen3 thinking-mode recommendation
+  top_p: 0.95
+  max_thinking_tokens: 384
+  max_answer_tokens: 1280                   # ~15 tokens per entry x 64 + margin
+  top_logprobs: 5
+  max_model_len: 6144
+  gpu_memory_utilization: 0.9
+  gate_split: validation
+encoders:                                   # Notebook 1, RoBERTa-Large teacher + DistilBERT baseline
+  roberta:
+    preset: roberta_large_en                # KerasHub weights (JAX)
+    hf_tokenizer: FacebookAI/roberta-large  # same BPE vocabulary, read with `tokenizers`
+    specials: {bos: "<s>", sep: "</s>", pad: "<pad>"}
+  distilbert:
+    preset: distil_bert_base_en_uncased
+    hf_tokenizer: distilbert/distilbert-base-uncased
+    specials: {bos: "[CLS]", sep: "[SEP]", pad: "[PAD]"}
+  max_tokens: 512
+  max_sentence_tokens: 64
+  max_sentences: 48                         # sentences per packed window
+  epochs: 2
+  batch_size: 8
+  peak_lr: 1.0e-5
+  warmup_fraction: 0.1
+  weight_decay: 0.01
+  mixed_precision: mixed_float16
+  data_parallel: false                      # one T4 (NCCL failed across 2x T4)

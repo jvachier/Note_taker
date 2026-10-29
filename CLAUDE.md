@@ -2,7 +2,10 @@
 
 Two small transformer models built **from scratch** and published on Hugging Face:
 - **Model 2 – Cleanup**: restores punctuation and casing in noisy lowercase text.
-- **Model 1 – Utterance scorer**: extractive dialogue notes, distilled from Qwen teachers.
+- **Model 1 – Meeting notes** (v3, PLAN.md §10): hierarchical student that extracts decisions,
+  action items and key points from meetings. Trained on the gold-labelled corpus
+  `meeting-notes-extractive-v1` (separate repo) and distilled from Qwen3-0.6B's reasoning and a
+  fine-tuned RoBERTa-Large. The v1/v2 DialogSum scorer (`src/model1_scorer/`) is kept as history.
 
 `PLAN.md` is the source of truth for data, tokenizer, architectures, losses, hyperparameters,
 metrics and tests. Read it before writing code. If something here conflicts with PLAN.md, ask.
@@ -23,10 +26,16 @@ metrics and tests. Read it before writing code. If something here conflicts with
   `@keras.saving.register_keras_serializable(package="dialogue_models")` and implement `get_config`.
 - **No pretrained weights or pretrained tokenizers** in our models. The tokenizer is trained by us
   with the `tokenizers` library (WordPiece).
-- The Qwen teachers are used **only** to produce labels, only on Kaggle, and never in the same
-  environment as training: in `src/model1_scorer/teacher/` (reference code, tested locally with a
-  fake teacher) and in the Model 1 notebook, where they run in their own virtual environment
-  (vLLM) as a subprocess before JAX starts.
+- **Teachers and baselines** (Qwen3-0.6B, RoBERTa-Large, DistilBERT) run **only on Kaggle, only in
+  the Model 1 teacher notebook** (Notebook 1), never in the student training environment:
+  - Qwen runs in its own virtual environment (vLLM). Reference code lives in
+    `src/model1_notes/teacher/` (and `src/model1_scorer/teacher/` for v1/v2), tested locally
+    with a fake teacher.
+  - RoBERTa-Large and DistilBERT are fine-tuned there with KerasHub on the JAX backend (no
+    PyTorch).
+  - Only their cached outputs (`.npy` / Parquet) reach Notebook 2. Their weights are never
+    part of our published models.
+- Never download Qwen, RoBERTa-Large or DistilBERT locally.
 - BERTScore and ROUGE are evaluation-only; never import them in training code.
 
 ## Data and configs
@@ -34,11 +43,11 @@ metrics and tests. Read it before writing code. If something here conflicts with
 - Pre-tokenize to `int32` NumPy arrays (`.npy`, memory-mapped). Training reads arrays, not text.
 - Every hyperparameter lives in `configs/*.yaml`. No hard-coded hyperparameters in `src/`.
 - Every run takes a `seed` and sets it for Python, NumPy and Keras (`keras.utils.set_random_seed`).
-- Splits: official DialogSum and WikiText splits; no dialogue ID in more than one split.
+- Splits: official DialogSum and WikiText splits; for Model 1 v3, the corpus's own splits
+  (pinned version). No dialogue or meeting ID in more than one split.
 
 ## Local machine (MacBook M2, 16 GB RAM)
 - Local = development, tests, tiny smoke runs, CPU evaluation. Real training runs on Kaggle GPUs.
-- Never download the teacher models locally.
 - Keep local data under ~2 GB. Smoke configs (`configs/*_tiny.yaml`) must run in under 2 minutes on CPU.
 
 ## Commands
@@ -50,7 +59,7 @@ metrics and tests. Read it before writing code. If something here conflicts with
 ## Layout
 ```
 configs/  src/data/  src/tokenizer/  src/layers/  src/model2_cleanup/
-src/model1_scorer/  src/eval/  notebooks/kaggle/  results/  tests/
+src/model1_scorer/  src/model1_notes/  src/eval/  notebooks/kaggle/  results/  tests/
 ```
 
 ## Skills in this repo (`.claude/skills/`)

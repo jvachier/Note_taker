@@ -96,7 +96,7 @@ pip install "keras>=3.6" jax tokenizers huggingface_hub
 import sys
 from huggingface_hub import snapshot_download
 
-folder = snapshot_download("Jvachier/punctuation-casing-en-7m")
+folder = snapshot_download("<hf-user>/punctuation-casing-en-7m")
 sys.path.insert(0, folder)
 import modeling  # registers the custom layers
 

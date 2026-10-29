@@ -15,6 +15,23 @@ CLEANUP = {
 }
 
 DIALOGUES = {
+    "Sprint planning (longer)": """\
+Maria: Okay, let's start. Today we plan the next sprint and agree on the release.
+Tom: Before that, a quick status. The search feature is done, but the export to PDF is still broken.
+Maria: How bad is the export problem?
+Tom: It crashes on files over ten megabytes. About five percent of our customers hit it.
+Priya: Support got twelve tickets about it last week, so it is hurting us.
+Maria: Then the export fix comes first in this sprint.
+Tom: Agreed. I can fix it, but I need help testing on large files.
+Priya: I will prepare a set of large test files by Wednesday.
+Maria: Good. What about the new onboarding screens?
+Priya: Design is ready, but we have not tested them with users yet.
+Tom: Maybe we could skip the user tests this time?
+Maria: No, we keep the user tests. Priya, can you book three sessions for next week?
+Priya: Yes, I will book them today.
+Maria: So we release on the 30th, if the export fix is done by the 25th.
+Tom: That works for me.
+Maria: Great, thanks everyone. See you on Thursday.""",
     "Project meeting": """Anna: Thanks for joining. We need to decide on the launch date today.
 Ben: The app is almost ready, but the payment page still has two bugs.
 Anna: How long do you need to fix them?

@@ -1,0 +1,122 @@
+{
+  "stage": "model1_v3",
+  "name": "model1_v3_E4",
+  "seed": 0,
+  "commit": null,
+  "config": {
+    "max_hours": 11,
+    "corpus": {
+      "revision": "v1.0",
+      "text_field": "sentence_text",
+      "sources": [
+        "synthetic",
+        "synthetic_hn",
+        "ami"
+      ]
+    },
+    "data": {
+      "max_sentence_tokens": 64,
+      "max_sentences": 256,
+      "window_overlap": 64,
+      "max_meetings": null,
+      "sentence_buckets": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "hard_negative_oversample": 2
+    },
+    "model": {
+      "vocab_size": 16000,
+      "d_model": 384,
+      "num_layers": 6,
+      "meeting_layers": 2,
+      "num_heads": 6,
+      "ffn_dim": 1536,
+      "max_len": 512,
+      "num_speakers": 8,
+      "dropout": 0.1,
+      "init_std": 0.02,
+      "num_zones": 5,
+      "num_reasons": 9,
+      "num_span_tags": 5
+    },
+    "loss": {
+      "importance": 1.0,
+      "zone": 0.5,
+      "spans": 0.3,
+      "qwen_kl": 0.5,
+      "roberta_kl": 0.5,
+      "reason": 0.3,
+      "depends_on": 0.3,
+      "temperature": 2.0,
+      "zone_class_weights": "inverse_sqrt"
+    },
+    "optimizer": {
+      "name": "adamw",
+      "lr_sentence_encoder": 0.0001,
+      "lr_meeting": 0.0005,
+      "warmup_fraction": 0.1,
+      "schedule": "cosine",
+      "weight_decay": 0.01
+    },
+    "inference": {
+      "zone_calibration": "ami",
+      "zone_threshold_grid": [
+        0.005,
+        0.5,
+        0.005
+      ]
+    },
+    "training": {
+      "sentences_per_batch": 2048,
+      "epochs": 15,
+      "max_steps": null,
+      "mixed_precision": "mixed_float16",
+      "data_parallel": false,
+      "early_stopping": {
+        "monitor": "val_loss",
+        "mode": "min",
+        "patience": 2
+      }
+    },
+    "teachers": [
+      "qwen",
+      "roberta"
+    ],
+    "name": "model1_v3_E4",
+    "paths": {
+      "corpus_dir": "/kaggle/input/datasets/<kaggle-user>/meeting-notes-extractive-v1",
+      "processed_dir": "/kaggle/working/data/processed/model1_v3",
+      "teacher_dir": "/kaggle/input/notebooks/<kaggle-user>/model1-teachersf85edcbfdb/data/labels/model1_v3",
+      "init_checkpoint": "/kaggle/input/datasets/<kaggle-user>/model1-v3-mlm-tokenizer/checkpoints/mlm/encoder.keras",
+      "output_dir": "/kaggle/working/checkpoints/model1_v3_E4",
+      "results_dir": "/kaggle/working/results"
+    }
+  },
+  "device": {
+    "devices": [
+      "cuda:0"
+    ],
+    "platform": "gpu",
+    "mixed_precision": "mixed_float16",
+    "keras": "3.15.1",
+    "jax": "0.10.2"
+  },
+  "params": 20947605,
+  "train_windows": 2071,
+  "zone_class_weights": [
+    2.959237,
+    0.63146,
+    2.088153,
+    1.804253,
+    3.504791
+  ],
+  "steps_per_epoch": 152,
+  "epochs_this_session": 4,
+  "started": "2026-10-25T16:55:57+00:00",
+  "finished": "2026-10-25T17:09:04+00:00",
+  "seconds": 814.4,
+  "status": "complete"
+}

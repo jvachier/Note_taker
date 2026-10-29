@@ -9,9 +9,10 @@ Kaggle limits: 12 h per session, ~30 GPU-hours per week. Every notebook must sur
 cut off and resumed.
 
 ## One self-contained notebook per model
-- `notebooks/kaggle/model2_cleanup.ipynb` and (later) `notebooks/kaggle/model1_scorer.ipynb`.
-  Each runs the model's whole pipeline: data download, tokenizer, arrays, training, evaluation,
-  results table.
+- `model2_cleanup.ipynb` (Model 2), `model1_scorer.ipynb` (Model 1 v1/v2 and the MLM encoder
+  that v3 starts from), `model1_teachers.ipynb` (v3 teachers and baselines) and
+  `model1_notes.ipynb` (v3 students), all in `notebooks/kaggle/`. Each runs its whole stage:
+  data, arrays, training, evaluation, results table.
 - **Not connected to this repo**: no `src` imports, no `git clone`, no embedded or generated
   repo code, no `configs/` files. All code is written in the notebook's own cells and every
   hyperparameter is in its `CONFIG` cell. Upload the `.ipynb`, set accelerator + Internet,
@@ -21,6 +22,9 @@ cut off and resumed.
   `dialogue_models` with the same class names and constructor arguments as `src/layers`, so the
   repo loads the `.keras` files (`tests/test_notebooks.py` checks this).
 - Commit notebooks without outputs.
+- Fail fast on inputs: check attachments and downloads in the first cells, before any GPU
+  work. Batch sessions cannot attach models. Reuse partial outputs instead of rerunning a
+  finished step.
 
 ## Notebook cells, in order
 1. `import os; os.environ["KERAS_BACKEND"] = "jax"`, then `ON_KAGGLE`, `SMOKE` (env `SMOKE=1`:
@@ -50,8 +54,12 @@ cut off and resumed.
   GPUs, one teacher per GPU in parallel (`CUDA_VISIBLE_DEVICES`). The training kernel never
   imports vLLM or PyTorch. In smoke mode a deterministic fake teacher replaces Qwen.
 - A labelling deadline leaves time for the other phases of the session.
-- Model: `Qwen/Qwen2.5-14B-Instruct-AWQ` or `Qwen/Qwen2.5-1.5B-Instruct` (v2: reference summary in
-  the prompt, 0-3 scale, 3 samples at temperature 0.7 merged per dialogue; greedy retry).
+- v3 (`model1_teachers.ipynb`): Qwen3-0.6B in thinking mode, plus RoBERTa-Large and DistilBERT
+  fine-tuned with KerasHub on JAX (no PyTorch). The venv is built with uv (`python -m venv`
+  fails on Kaggle).
+- v1/v2 (`model1_scorer.ipynb`): `Qwen/Qwen2.5-14B-Instruct-AWQ` or `Qwen/Qwen2.5-1.5B-Instruct`
+  (reference summary in the prompt, 0-3 scale, 3 samples at temperature 0.7 merged per
+  dialogue; greedy retry).
 - Write labels incrementally (JSONL, one dialogue per line) and skip dialogues already labelled,
   so a cut-off session resumes where it stopped.
 - If vLLM fails to install, fall back to `transformers` + `bitsandbytes` 4-bit and say so.

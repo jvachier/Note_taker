@@ -1,9 +1,11 @@
 # Demo app for both models: `docker compose up --build`, then open http://localhost:8050
 #
-# By default the models are downloaded from the Hugging Face Hub (cached in a volume).
-# To run local packages instead (`uv run python -m src.publish.package` writes ./release):
-#   MODEL2_SOURCE=/models/punctuation-casing-en-7m \
-#   MODEL1_SOURCE=/models/dialogue-notes-scorer-17m docker compose up --build
+# Settings come from your shell environment or a `.env` file next to this one (git-ignored):
+# - HF_NAMESPACE: the Hugging Face user or organisation hosting the models; they are then
+#   downloaded from <HF_NAMESPACE>/punctuation-casing-en-7m and <HF_NAMESPACE>/meeting-notes-en-21m
+#   (cached in a volume);
+# - or MODEL2_SOURCE / MODEL1_SOURCE: a Hub repo ID each, or a local package mounted from
+#   ./release (`uv run python -m src.publish.package`), e.g. /models/meeting-notes-en-21m.
 services:
   app:
     build: .
@@ -11,8 +13,9 @@ services:
     ports:
       - "${PORT:-8050}:8050"
     environment:
-      MODEL2_SOURCE: ${MODEL2_SOURCE:-Jvachier/punctuation-casing-en-7m}
-      MODEL1_SOURCE: ${MODEL1_SOURCE:-Jvachier/dialogue-notes-scorer-17m}
+      HF_NAMESPACE: ${HF_NAMESPACE:-}
+      MODEL2_SOURCE: ${MODEL2_SOURCE:-}
+      MODEL1_SOURCE: ${MODEL1_SOURCE:-}
       MODEL_REVISION: ${MODEL_REVISION:-}   # Hub branch, tag or commit; empty = main
       HF_TOKEN: ${HF_TOKEN:-}               # only needed for private repos
     volumes:

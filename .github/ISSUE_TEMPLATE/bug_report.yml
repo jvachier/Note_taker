@@ -1,0 +1,54 @@
+name: Bug report
+description: Something crashes or does not work as documented (code, app, notebooks, release).
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For **security problems**, do not open an issue: see
+        [SECURITY.md](../blob/main/SECURITY.md). If the code works but a model's output is
+        wrong, use the "Model output" template instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Demo app (Dash / Docker)
+        - Published model (Hub files, modeling.py, example.py)
+        - Training or data pipeline (src/)
+        - Kaggle notebook
+        - Release packaging
+        - Tests, CI or tooling
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands, config or input text, as small as possible.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: The full traceback or log. Remove any tokens or personal data first.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit SHA, or the Hub model repo and revision.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, CPU or GPU, and `keras` / `jax` versions.

@@ -1,0 +1,11 @@
+base: model1_v3.yaml
+name: model1_v3_ER
+description: Gold labels + RoBERTa-Large KL only (no Qwen) - isolates the strong teacher (approved 2026-10-25).
+seeds: [0]
+paths:
+  output_dir: checkpoints/model1_v3_ER
+teachers: [roberta]
+loss:
+  qwen_kl: 0.0
+  reason: 0.0
+  depends_on: 0.0

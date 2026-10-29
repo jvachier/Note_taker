@@ -136,7 +136,7 @@ Training mix: WikiText-103 windows + DialogSum train dialogues oversampled ×5 (
 
 ---
 
-## 5. Model 1: Distilled utterance scorer (extractive notes)
+## 5. Model 1: Distilled utterance scorer (extractive notes) — v1/v2, superseded by §10 for new work
 
 **Unit**: one utterance (speaker turn) of a DialogSum dialogue. Speaker tags `#Person1#` etc. are removed from the text and kept as speaker IDs.
 
@@ -263,10 +263,11 @@ v1 targets: A = 7B teacher, C = oracle 0/1, E = oracle 0/1 importance + 7B tags 
 7. Students A–D, 3 seeds each → evaluation → results tables. (Done: v1, plus Student E.)
 7b. v2: teacher labelling (14B, 1.5B; reference, 0-3 scale, 3 samples) + soft oracle → students A–E, 3 seeds each → evaluation → results tables.
 8. Publish both models to Hugging Face: `.keras` file, `tokenizer.json`, config, model card (data, licence, method, metrics, limitations, usage snippet).
+9. Model 1 v3 (§10): follow §10.9. It replaces steps 6–7b for new work; Model 1 is published from v3.
 
 ---
 
-## 9. Proposal: Model 1 v3 — abstractive notes (PENDING APPROVAL, logged 2026-10-13)
+## 9. Proposal: Model 1 v3 — abstractive notes (logged 2026-10-13; SUPERSEDED by §10, not implemented)
 
 Not approved and not in the order of work. Nothing here is implemented.
 
@@ -356,3 +357,376 @@ the full run; drop extractive students B and D if compute is tight.
 
 Sources: DialogSum (arXiv 2105.06762), MiniLMv2 (arXiv 2012.15828), sequence-level KD (Kim &
 Rush 2016), factual dialogue summarization from LLMs (arXiv 2406.14709), DisCal (arXiv 2310.13760).
+
+---
+
+## 10. Model 1 v3: meeting-notes student distilled from Qwen's reasoning (APPROVED 2026-10-17)
+
+This section **replaces §5.3–§5.6** (DialogSum teacher labelling and students) and §9
+(abstractive v3) for all new work. The v1 results in §6 and the code in `src/model1_scorer/`
+stay as history. New code goes in `src/model1_notes/`.
+
+**Why.**
+- The v1 student copied its Qwen teacher almost exactly (retention 0.997), but the teacher's
+  labels scored below Lead-3, and DialogSum chats are not meetings.
+- The v2 plan still needed about 10–14 GPU-h of labelling and student runs.
+
+v3 changes the data, the architecture and the teacher signal:
+- **Data:** the gold-labelled meeting corpus `meeting-notes-extractive-v1` (separate repo).
+- **Architecture:** a hierarchical student that reads whole meetings.
+- **Teachers:** a small reasoning LLM (Qwen3-4B) for *why* a sentence matters, plus
+  RoBERTa-Large for a second, bidirectional view.
+
+Decisions taken on 2026-10-17:
+- one main experiment (E4) plus one control (E1)
+- a 21M student that reuses the existing MLM encoder (no new pretraining)
+- Qwen3-4B in thinking mode as the LLM teacher, with Qwen3-1.7B as fallback
+- RoBERTa-Large hidden-state MSE is dropped: aligning hidden states across tokenizers is
+  unreliable
+
+### 10.1 Task and output
+Input: a meeting as a list of `(speaker, sentence)`. ASR-style text goes through Model 2
+first. Output: **structured extractive notes**:
+```
+Decisions      – zone = decision,    importance = 1, in meeting order
+Action items   – zone = action_item, importance = 1, with owner / deadline spans
+Key points     – zone = discussion,  importance = 1
+```
+- Sentences are selected by an importance threshold tuned on validation, not a fixed top-k.
+- No text is generated: no decoder.
+
+### 10.2 Data
+- Corpus `meeting-notes-extractive-v1`, pinned to `v1.0`. The Kaggle notebooks attach it as a
+  Kaggle dataset; locally it is downloaded from HF. Until v1.0 is out, development uses the
+  corpus pilot / tiny files.
+- Splits:
+  - **Train:** synthetic train + hard negatives (oversampled ×2) + AMI train
+  - **Validation:** synthetic validation + AMI validation, used for early stopping, the
+    threshold and the teacher quality gate
+  - **Test:** synthetic test and **AMI test (headline)**, reported separately
+- Input text: `sentence_text` in training. The pipeline row (§10.7) uses
+  `sentence_text_asr` → Model 2 → Model 1.
+- Tokenizer: the existing 16k WordPiece (§2), unchanged.
+- Pre-tokenised `int32` `.npy`: `[n_sentences, 64]` per meeting, plus label and teacher arrays.
+  Sentences longer than 64 subwords are truncated; the count is logged.
+
+### 10.3 Notebook 1: teachers (own environment; only cached arrays leave it)
+
+**Qwen3-4B, thinking mode** (vLLM, fp16 on T4, own uv venv as before). Fallback: Qwen3-1.7B.
+- **Step 0: compatibility check.** Load the model in vLLM on a T4, run 5 meetings, and log
+  throughput. If this fails, use Qwen2.5-3B-Instruct without thinking. That is a change from
+  this plan and needs approval.
+- **Input:** one meeting, numbered sentences with speakers. Meetings with more than 256
+  sentences are split into windows of 256 with a 64-sentence overlap. The teacher **never
+  sees the gold labels**.
+- **Output:** a thinking block (capped at `max_thinking_tokens`, config), then JSON only. The
+  format is shown **without example values**:
+  `[{"id": <int>, "score": <int 0-3>, "reason": <string>, "depends_on": <int|null>}, …]`
+  - `score`: anchored 0–3 scale, as in v2.
+  - `reason`, one of: `agreed_outcome`, `commitment_with_owner`, `risk_or_blocker`,
+    `key_fact`, `status_update`, `rejected_proposal`, `tentative`, `question`, `filler`.
+  - `depends_on`: the earlier sentence that makes this one meaningful (e.g. the proposal
+    behind an agreement), or null.
+- **Soft scores from logprobs:**
+  - generate with `logprobs=5`
+  - for each `score` digit token, read the probabilities of `0`–`3`, renormalise, and take
+    the expected value / 3 as the soft score
+  - if the digits are missing from the top-5, fall back to the one-hot of the emitted score
+- **Validation of each output:**
+  - valid JSON, every ID exactly once
+  - `score` in range, `reason` in the set
+  - `depends_on` is null or an earlier ID
+
+  On failure: one greedy retry with the reason, then drop the meeting. The failure rate is
+  logged.
+- **Which meetings are labelled:** all validation meetings, AMI train/validation, and up to
+  `max_train_meetings` synthetic train meetings (start with 1,000). Meetings without teacher
+  labels get zero weight on the teacher losses.
+- **Raw outputs kept,** including the thinking text, for analysis and the blog. They are not
+  used for training.
+- **Quality gate (before Notebook 2):** compare Qwen's labels with gold on validation:
+  - importance F1 (soft score > 0.5)
+  - reason ↔ zone agreement
+  - F1 on the hard negatives
+
+  If importance F1 does not beat the keyword baseline (§10.6), stop and report. Do not
+  distil.
+
+**RoBERTa-Large** (KerasHub preset `roberta_large_en`, JAX backend, mixed precision):
+- Fine-tuned once on corpus train gold importance labels.
+- Input: windows of consecutive sentences up to 512 tokens, separated by `</s>`, with a
+  32-token overlap.
+- Sentence score: mean of the sentence's token states → `Dense(1)`.
+- 2 epochs, AdamW lr 1e-5, warmup 10%, early stopping on validation loss.
+- Cached output: per-sentence logits on train/validation/test. Test logits give the ceiling
+  row.
+
+**DistilBERT** (KerasHub `distil_bert_base_en_uncased`): the same recipe as RoBERTa, used as
+the **baseline row only** (not a teacher).
+
+### 10.4 Student architecture (~21M params)
+```
+sentence tokens (≤ 64) ─► Sentence encoder: 6L, d384, 6h, FFN 1536   (existing MLM encoder, reused)
+                        ─► [CLS] vector per sentence
+                        ─► + speaker emb (S1…S8, by first appearance) + sentence-position emb (≤ 256)
+                           + speaker-change flag
+                        ─► Meeting encoder: 2L, d384, 6h, FFN 1536, pre-LN (src/layers block)
+                        ─► per-sentence heads:
+                             importance  Dense(1)
+                             zone        Dense(5)
+                             reason      Dense(9)        (Qwen's reasoning, §10.3)
+                             depends_on  pointer: bilinear score to each earlier sentence + "none"
+                        ─► per-token head (sentence encoder output): spans Dense(5), BIO {owner, deadline}
+```
+- **Sentence encoder:** loaded from `checkpoints/mlm/encoder.keras`, using its first 64 learned
+  positions.
+- **Meeting encoder and heads:** new, random init, about 4M params.
+- **Long meetings:** windows of 256 sentences with a 64-sentence overlap; overlapping scores
+  are averaged.
+- **Static shapes:** batches bucketed by sentence count (32 / 64 / 128 / 256), with a fixed
+  64 tokens per sentence.
+- Every custom layer and model is registered with `get_config`, as usual.
+
+### 10.5 Losses and experiments
+```
+L_E4 = 1.0 · BCE(importance, gold; weighted by confidence)
+     + 0.5 · KL(importance, Qwen soft score;   T = 2)
+     + 0.5 · KL(importance, RoBERTa logits;    T = 2)
+     + 0.3 · CE(reason, Qwen)
+     + 0.3 · CE(depends_on, Qwen)
+     + 0.5 · CE(zone, gold; inverse-sqrt class weights; masked on AMI for context/closing)
+     + 0.3 · CE(spans, gold; synthetic only)
+L_E1 = L_E4 without the four teacher terms
+```
+All weights and temperatures live in `configs/model1_v3_E4.yaml` / `model1_v3_E1.yaml`.
+
+| Run | Seeds | Purpose |
+|---|---|---|
+| **E4**: gold + Qwen (scores, reasons, links) + RoBERTa | 3 | Main result |
+| **E1**: gold only, same architecture | 1 | Control: shows whether distillation helped |
+
+- Optimiser: AdamW. lr 1e-4 for the sentence encoder, 5e-4 for the meeting encoder and heads.
+  Warmup 10%, cosine schedule.
+- Batch of 16 meetings; up to 15 epochs.
+- Early stopping on validation loss, patience 2.
+
+### 10.6 Baselines (no extra student runs)
+| Row | Params | How |
+|---|---|---|
+| Lead-k | – | First k sentences; k tuned on validation |
+| Keyword rule | – | Trigger words ("decided", "will … by"), tuned on validation |
+| Qwen3-4B (teacher) | 4B | Its own labels (soft score > 0.5) |
+| RoBERTa-Large (fine-tuned) | 355M | Ceiling |
+| DistilBERT (fine-tuned) | 66M | Primary opponent |
+| Student E1 / **E4** | ~21M | Ours |
+
+### 10.7 Evaluation (`src/eval/`; ROUGE and BERTScore are evaluation only)
+- **Sentence level** (synthetic test, AMI test): importance F1 and PR-AUC; zone macro-F1;
+  decision / action_item F1, all against **gold**. Hard-negative precision on synthetic.
+- **Spans** (synthetic test): owner and deadline exact-match F1.
+- **Summary level** (AMI test): ROUGE-1/2/L and BERTScore of the notes against AMI's human
+  summary. Decisions are scored against the decisions section and actions against the actions
+  section.
+- **Distillation:** agreement between the student and Qwen on reasons and `depends_on`
+  (validation), shown with the E4 − E1 difference.
+- **Pipeline:** ASR-style text → Model 2 → student, versus clean text.
+- **Efficiency:** parameters, file size, CPU latency per meeting (M2) at 100 and 500
+  sentences. Each teacher's GPU latency is shown for reference.
+
+### 10.8 Compute (Kaggle 2× T4, wall-clock; updated 2026-10-21 from the first Qwen run)
+| Notebook | Work | Time |
+|---|---|---|
+| 1 | Setup: vLLM venv + Qwen3-0.6B download | ~15–20 min |
+| 1 | Qwen3-0.6B labels: all validation + test, 400 synthetic + 30 AMI train meetings, windows of 64 sentences, one shard per T4 | **~6–7 h** (measured: a synthetic meeting is ~2 windows and a batch of 64 takes ~25 min; an AMI meeting is ~16 slow windows and a batch of ~20 takes ~70–75 min, so AMI dominates) |
+| 1 | Merge + quality gate | < 1 min |
+| 1 | RoBERTa-Large fine-tune (2 epochs) + logits; DistilBERT fine-tune + logits | ~45–75 min (estimate) |
+| **1** | **Notebook 1 total** | **~7.5–8 h**: Qwen stops at 60% of the 11 h budget, so the last Qwen meetings may need a short second session (resumes) |
+| 2 | Arrays + first-epoch compilation | ~10 min |
+| 2 | E4 × 3 seeds + E1 × 1: ~3–5 min per epoch, 6–10 epochs with early stopping (max 15) | ~1.5–3 h (estimate; worst case ~4.5 h) |
+| **2** | **Notebook 2 total** | **~1.5–3 h** |
+| | **Both notebooks** | **~9–11 h** (~1/3 of the weekly quota) |
+
+Measured so far: Qwen3-4B ran at ~40 output tok/s per T4 (it would have needed 8–17 h), so the
+teacher was switched to Qwen3-0.6B (~200 tok/s). The AMI windows cost most of the Qwen time:
+`max_ami_train_meetings` 30 → 10 would save ~1.5–2 h in a future relabelling. Notebook 2's epoch time is checked on the first
+epoch (Keras prints `s/step`); multiply by ~8 epochs × 4 runs for the total.
+
+Notebook 1 frees all GPU memory before it ends. Notebook 2 never loads a teacher.
+
+### 10.9 Order of work (stop and report after each step)
+1. CLAUDE.md and configs for v3. Corpus loader + pre-tokenisation in
+   `src/model1_notes/data.py`, against the corpus pilot / tiny files.
+2. Student: meeting encoder, heads (including the pointer head), losses, MLM weight loading;
+   tests; `configs/model1_v3_tiny.yaml` smoke run (< 2 min on CPU).
+3. Teacher reference code in `src/model1_notes/teacher/`: prompt, JSON validator, logprob
+   soft scores. Tested locally with a fake teacher; Qwen is never downloaded locally.
+4. Notebook 1 (Kaggle): Qwen check → labels → quality gate → RoBERTa / DistilBERT. Stop and
+   report the gate result.
+5. Notebook 2 (Kaggle): E4 × 3, E1 × 1, evaluation.
+6. Results tables, notes renderer (with Model 2 for ASR input), then `hf-publish`.
+
+Steps 4–5 wait for the corpus v1.0 release.
+
+**Progress log**
+- 2026-10-17, step 1 done:
+  - `configs/model1_v3{,_E4,_E1,_tiny}.yaml`
+  - `src/model1_notes/data.py`: corpus Parquet → per-sentence `int32` arrays, plus meeting
+    windows of 256 sentences overlapping by 64
+  - tests in `tests/test_model1_notes_data.py`
+  - `pyarrow` added to the dependencies
+- 2026-10-17, step 2 done:
+  - `src/model1_notes/{model,losses,train,tiny_corpus}.py`
+  - 20.9M params (17.0M reused MLM encoder + 4.0M new); the real `checkpoints/mlm/encoder.keras`
+    loads into it
+  - smoke run: `python -m src.model1_notes.tiny_corpus`, then `.data`, then
+    `.train --config configs/model1_v3_tiny.yaml --seed 0`, about 20 s on CPU
+  - tests in `tests/test_model1_notes_model.py`
+  - Part of step 5 done early: threshold tuning plus importance / zone F1 per source, in
+    `train.py`.
+  - The teacher array format (aligned to the processed sentence rows) is fixed in the
+    `train.py` docstring. The Notebook 1 export must write it.
+- 2026-10-29, **v1.1 results, balanced zone calibration and release choice (approved).**
+  - E1 and E4 × 3 seeds on corpus v1.1. AMI test importance F1: **E1 0.578 ± 0.006**,
+    E4 0.567 ± 0.006 (DistilBERT 0.580, RoBERTa-Large 0.634). Distillation gave no measurable
+    gain on v1.1; the v1.0 single-seed lead of E4 (0.589) was within seed noise. Likely causes:
+    Qwen is a weak teacher (AMI 0.318), gold labels already cover every sentence, and the v1.0
+    teacher outputs miss the v1.1 addendum meetings.
+  - **Released: E1 seed 1** (best AMI validation importance, 0.584). E4 seed 2 (its best on
+    validation) was worse on the app examples: its `depends_on` pointer attached replies to the
+    wrong sentence, and it filed facts as decisions / action items.
+  - **Zone calibration `balanced`** (`inference.zone_calibration`; E1 and E4): decision and
+    action thresholds maximise the mean of AMI and synthetic validation F1, so the small AMI
+    group weighs as much as the synthetic one. `ami` set the action threshold to ~0.005, so
+    clean conversations filed facts as action items; `all` gave AMI decision / action F1 0.
+    E1 test, `ami` → `balanced`: synthetic zone F1 0.547 → 0.620, AMI decision F1
+    0.083 → 0.081, **AMI action F1 0.091 → 0.016** (the cost). The `ami` metrics are kept as
+    `metrics.ami_calibration.json` and `results/tables/model1_v3.ami_calibration.md`.
+  - **Post-processing:**
+    - `use_pointer: false` for E1 (its `depends_on` head is never trained).
+    - Without a pointer, a reply attaches to the nearest kept sentence among the
+      `lookback: 3` previous ones, skipping unkept fragments.
+    - The speaker-as-owner rule runs before replies attach, so a reply never takes the owner of
+      the speaker's own "I …" commitment.
+  - **App:**
+    - Sentences split only before a capital, digit or quote, so a cleanup slip ("rent.
+      increase") stays one sentence.
+    - "Restore punctuation & casing first" is ticked by default.
+  - **Known limits (model card):**
+    - Extractive: a decision spread over several turns ("Monday at ten") is not produced.
+    - Deadlines in replies are sometimes missed.
+    - AMI decision / action F1 stays below 0.1.
+    - Generated (abstractive) notes would be a v4.
+- 2026-10-25, **corpus v1.1 and retraining plan (option 2, approved).**
+  - **The problem:** the student dropped every first-person task ("I will email him tonight":
+    0.01). The corpus marked 93% of first-person commitments unimportant, because a chair always
+    restated them.
+  - **Corpus v1.1** (corpus repo PLAN §9c):
+    - 18 seed relabels (follow-up tasks nobody restates), applied to the v1.0 meetings in place
+      (492 rows; text byte-identical, so the Qwen labels stay valid)
+    - 300 addendum meetings: first-person tasks, terse decisions, 100 informal conversations
+    - quality report PASS
+  - **Note_taker:**
+    - configs point at `data/raw/meeting_notes_v1_1`
+    - Notebook 1 restores merged Qwen tables (no Qwen rerun) and retrains RoBERTa + DistilBERT
+    - Notebook 2 is synced with the zone calibration and runs E4 / E1 × 3 seeds
+  - **Kaggle uploads** in `data/kaggle_upload/`: corpus v1.1, salvaged Qwen tables, MLM encoder +
+    tokenizer.
+  - **Regression check after retraining:** the app's "Raw transcript (no punctuation)" example
+    (landlord) must yield its first-person tasks.
+- 2026-10-25, **Notes post-processing (option 1, no retraining)** in
+  `src/model1_notes/postprocess.py`, configured under `inference.postprocess`:
+  - Short replies ("Yes, I will…", "Agreed.") are attached under the kept request or decision
+    they answer, via the `depends_on` head or the previous sentence. A confirmation joins a
+    reply chain; a bare "I'll…" does not.
+  - A first-person reply or action item supplies a missing owner (the speaker) and deadline.
+  - The app has a keep-threshold slider.
+  - Rejected after measurement: keeping unkept first-person commitments. It lowered AMI action
+    F1 0.111 → 0.08–0.09; only 11% of such sentences are gold-important.
+  - Zone calibration for all three runs, AMI test decision / action F1: E1 0.093 / 0.073,
+    E-R 0.083 / 0.023, **E4 0.119 / 0.111**. E4 stays the best run.
+- 2026-10-25, **Notebook 2 results and zone calibration.**
+  - Each run took ~14 min on one T4. AMI importance F1: E1 0.573, E-R 0.571, **E4 0.589**.
+    DistilBERT scores 0.580 and RoBERTa 0.634.
+  - Problem: argmax zones never produced decision / action items on AMI, so their F1 was 0.
+  - Fix: new `src/model1_notes/calibrate.py` gives each of the two zones its own threshold,
+    tuned on AMI validation (`inference.zone_calibration: ami`); training does this
+    automatically from now on.
+  - E4 on AMI test: decision F1 0 → 0.119, action F1 0 → 0.111. Cost on synthetic: action
+    0.98 → 0.88, decision 0.64 → 0.60.
+  - The app now serves Model 1 v3 (`release/meeting-notes-en-21m`, kind `notes`): sections
+    Decisions / Action items / Key points, and a chart of every sentence's importance.
+  - Known weaknesses in the demo: some first-person commitments ("I'll …") are missed, and "I" is
+    never extracted as an owner.
+- 2026-10-25, **Notebook 2 run list changed (approved).**
+  - Runs: E1 (gold only), **E-R** (gold + RoBERTa KL, new: `configs/model1_v3_ER.yaml`) and E4
+    (gold + RoBERTa + Qwen), **one seed each**.
+  - This replaces E4 × 3 + E1. Qwen3-0.6B only matches Lead-k on AMI, so E-R separates the strong
+    teacher's effect from Qwen's.
+  - Seeds 1–2 are added later for the best run.
+  - Upload for Notebook 2: `data/kaggle_upload/model1-v3-notebook2-inputs.zip` (teacher tables,
+    MLM encoder, tokenizer).
+- 2026-10-24, **Notebook 1 done.**
+  - **Qwen3-0.6B** (~7 h on Kaggle) answered in object form, inside an extra array, with
+    `<|im_end|>` left in and often cut at the token budget. The strict reader therefore kept 0.2%
+    of sentences.
+  - **Fix:** `teacher/salvage.py` re-read the saved raw answers locally with the new lenient reader
+    (`answer.parse_entries`) and merged them per sentence (`label.merge_meeting`). Coverage is now
+    83% of validation and test and 82% of train. Soft scores are score / 3, because the raw
+    answers keep no log-probabilities.
+  - **Gate** (validation, 25k sentences): passed, narrowly. Qwen F1 0.365, Lead-k 0.313, keyword
+    rule 0.089.
+  - **RoBERTa-Large** (19 min) and **DistilBERT** (10 min) fine-tuned on **one T4**: NCCL across
+    the two T4s failed (`Cuda failure 500`), hence the new `data_parallel: false`.
+  - **Kaggle Models** must be attached as inputs: a batch session cannot attach them, and the
+    notebook now checks for them first.
+  - **Test results (gold labels), AMI importance F1:** Qwen 0.318 (= Lead-k 0.319), RoBERTa 0.634,
+    DistilBERT 0.580. Synthetic: 0.414, 0.939, 0.905.
+  - Notebook 1's Qwen code is synced with the lenient reader, but it doesn't need to run again.
+- 2026-10-21, **teacher switched to Qwen3-0.6B** (the smallest Qwen3, as the user asked).
+  - Why: on Kaggle, Qwen3-4B on T4 ran at about 40 output tokens/s (40 windows per ~17 min),
+    which works out to 8–17 h.
+  - New budgets: 64-sentence windows (overlap 16), 384 thinking tokens, 1,280 answer tokens,
+    context 6,144.
+  - Training meetings labelled: 400 synthetic and 30 AMI (new key `max_ami_train_meetings`).
+  - Fallback if the gate fails: Qwen3-1.7B.
+  - Read "Qwen3-4B" in this section as Qwen3-0.6B.
+- 2026-10-21, steps 3, 5 and the notebooks are done (local). Kaggle runs and publishing are left:
+  - **Step 3:**
+    - Qwen teacher code in `src/model1_notes/teacher/`: prompt, answer validation, soft scores
+      from logprobs, windows, fake backend, vLLM backend, merge
+    - quality gate in `teacher/gate.py`
+    - baselines in `baselines.py`
+    - RoBERTa / DistilBERT in `encoder_teachers.py`
+  - **Step 5:** `metrics.py`, `evaluate.py` (→ `results/tables/model1_v3.md`) and `notes.py`
+    (Markdown notes, optional Model 2 cleanup).
+  - **Steps 4–5 notebooks:** `notebooks/kaggle/model1_teachers.ipynb` (Notebook 1) and
+    `notebooks/kaggle/model1_notes.ipynb` (Notebook 2). Both are self-contained, and their smoke
+    runs pass in `tests/test_notebooks.py`. `fetch_outputs.py` pulls their outputs.
+  - **Real-corpus check (CPU, 3 steps, MLM init):** the pipeline runs end to end. AMI test
+    importance F1 is 0.46, against 0.32 for Lead-k and 0.03 for the keyword rule.
+  - **Deviations from this section** (made while finishing):
+    - Batches hold a sentence budget (`sentences_per_batch: 2048`) instead of 16 windows, which
+      would be about 260k tokens per step on a T4.
+    - Teacher outputs are Parquet tables keyed by `(note_id, sentence_id)`.
+    - Qwen answers use compact entries `[id, score, "reason", depends_on]` and teacher windows of
+      128 sentences, to save tokens.
+    - The gate must beat **both** the keyword rule and Lead-k: the keyword rule alone scores 0.13
+      F1 on synthetic validation.
+    - Teacher tokenizers come from the `tokenizers` library, because KerasHub's need TensorFlow.
+    - The v3 loss is named `NotesImportanceLoss`, to avoid a registry clash with v1.
+    - The `TimeGuard` last-epoch fix is applied in `src/training.py`, with a test.
+- **Next (on Kaggle):**
+  - Notebook 1, with the corpus attached. Read `qwen/gate.json`; if it fails, set the
+    `Qwen3-1.7B` fallback or stop.
+  - Notebook 2, with the corpus, the v1 `model1_scorer` output and the Notebook 1 output
+    attached.
+  - `fetch_outputs.py` for both notebooks, then `python -m src.model1_notes.evaluate --latency`,
+    then `hf-publish`.
+
+Sources:
+- HiBERT (arXiv 1905.06566)
+- Distilling Step-by-Step (arXiv 2305.02301)
+- MixSumm/PPSL (arXiv 2407.07341)
+- Meeting action items (arXiv 2303.16763)
+- Cramming (arXiv 2212.14034)
+- Cross-tokenizer distillation (arXiv 2602.21669)

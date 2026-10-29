@@ -1,0 +1,214 @@
+{
+  "stage": "model1_teachers",
+  "smoke": false,
+  "config": {
+    "seed": 0,
+    "max_hours": 11,
+    "qwen_share": 0.6,
+    "teacher": {
+      "model": "Qwen/Qwen3-0.6B",
+      "fallback_model": "Qwen/Qwen3-1.7B",
+      "vllm_spec": "vllm==0.31.0",
+      "python": "3.12",
+      "splits": [
+        "validation",
+        "test",
+        "train"
+      ],
+      "max_train_meetings": 400,
+      "max_ami_train_meetings": 30,
+      "window_sentences": 64,
+      "window_overlap": 16,
+      "batch_meetings": 64,
+      "think_temperature": 0.6,
+      "top_p": 0.95,
+      "max_thinking_tokens": 384,
+      "max_answer_tokens": 1280,
+      "top_logprobs": 5,
+      "max_model_len": 6144,
+      "gpu_memory_utilization": 0.9,
+      "gate_split": "validation",
+      "accept_partial_train": true
+    },
+    "encoders": {
+      "roberta": {
+        "preset": "roberta_large_en",
+        "hf_tokenizer": "FacebookAI/roberta-large",
+        "specials": {
+          "bos": "<s>",
+          "sep": "</s>",
+          "pad": "<pad>"
+        }
+      },
+      "distilbert": {
+        "preset": "distil_bert_base_en_uncased",
+        "hf_tokenizer": "distilbert/distilbert-base-uncased",
+        "specials": {
+          "bos": "[CLS]",
+          "sep": "[SEP]",
+          "pad": "[PAD]"
+        }
+      },
+      "max_tokens": 512,
+      "max_sentence_tokens": 64,
+      "max_sentences": 48,
+      "epochs": 2,
+      "batch_size": 8,
+      "peak_lr": 1e-05,
+      "warmup_fraction": 0.1,
+      "weight_decay": 0.01,
+      "mixed_precision": "mixed_float16",
+      "data_parallel": false
+    },
+    "baselines": {
+      "lead_fractions": [
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.4,
+        0.5
+      ],
+      "keywords": {
+        "decision": [
+          "\\b(we|we've|we have) (decided|agreed)\\b",
+          "\\bdecision\\b",
+          "\\blet's go with\\b",
+          "\\b(we'll|we will) go (with|for)\\b",
+          "\\bagreed\\b",
+          "\\bfinal answer\\b"
+        ],
+        "action": [
+          "\\b(\\w+ will|i'll|you'll|he'll|she'll|they'll|we'll) (send|do|take|check|write|prepare|follow|set|book|draft|update|look|fix|call|share|finish)\\b",
+          "\\baction item\\b",
+          "\\bby (monday|tuesday|wednesday|thursday|friday|tomorrow|end of (the )?(day|week|sprint))\\b",
+          "\\bcan you (send|check|take|prepare|update|look)\\b"
+        ]
+      }
+    }
+  },
+  "corpus": "/kaggle/input/datasets/<kaggle-user>/meeting-notes-extractive-v1/data/release/v1",
+  "qwen": {
+    "status": "complete (train partly labelled)",
+    "gate": {
+      "split": "validation",
+      "sentences": 63,
+      "coverage": 0.0021,
+      "importance_f1": 0.5,
+      "keyword_f1": 0.3,
+      "lead_f1": 0.3415,
+      "lead_fraction": 0.4,
+      "hard_negative_fp": 0.0,
+      "keyword_hard_negative_fp": 0.0,
+      "reason_zone_agreement": 0.0,
+      "passed": true
+    },
+    "shards": {
+      "0": {
+        "splits": {
+          "validation": {
+            "stopped_early": false,
+            "labelled": 0,
+            "failed": 82,
+            "seconds": 6235.6,
+            "meetings": 82,
+            "failure_rate": 1.0
+          },
+          "test": {
+            "stopped_early": false,
+            "labelled": 0,
+            "failed": 82,
+            "seconds": 7439.4,
+            "meetings": 82,
+            "failure_rate": 1.0
+          },
+          "train": {
+            "stopped_early": false,
+            "labelled": 1,
+            "failed": 216,
+            "seconds": 13323.0,
+            "meetings": 217,
+            "failure_rate": 0.9954
+          }
+        },
+        "backend": "vllm 0.31.0",
+        "model": "Qwen/Qwen3-0.6B",
+        "complete": true
+      },
+      "1": {
+        "splits": {
+          "validation": {
+            "stopped_early": false,
+            "labelled": 2,
+            "failed": 86,
+            "seconds": 8431.7,
+            "meetings": 88,
+            "failure_rate": 0.9773
+          },
+          "test": {
+            "stopped_early": false,
+            "labelled": 0,
+            "failed": 88,
+            "seconds": 6840.7,
+            "meetings": 88,
+            "failure_rate": 1.0
+          },
+          "train": {
+            "stopped_early": true,
+            "labelled": 0,
+            "failed": 192,
+            "seconds": 0,
+            "meetings": 213,
+            "failure_rate": 0.9014
+          }
+        },
+        "backend": "vllm 0.31.0",
+        "model": "Qwen/Qwen3-0.6B",
+        "complete": false
+      }
+    }
+  },
+  "encoders": {
+    "roberta": {
+      "status": "complete",
+      "seconds": 1143.9,
+      "history": {
+        "loss": [
+          0.17046703398227692,
+          0.10829880833625793
+        ],
+        "val_loss": [
+          0.19796344637870789,
+          0.19254128634929657
+        ]
+      },
+      "sentences": {
+        "train": 186226,
+        "validation": 30357,
+        "test": 29648
+      }
+    },
+    "distilbert": {
+      "status": "complete",
+      "seconds": 620.2,
+      "history": {
+        "loss": [
+          0.24890942871570587,
+          0.13646626472473145
+        ],
+        "val_loss": [
+          0.24590860307216644,
+          0.25397899746894836
+        ]
+      },
+      "sentences": {
+        "train": 186226,
+        "validation": 30357,
+        "test": 29648
+      }
+    }
+  },
+  "hours": 0.511
+}

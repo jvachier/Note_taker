@@ -218,3 +218,42 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Project ---
+.DS_Store
+/data/
+/checkpoints/
+/release/
+*.npy
+*.npz
+*.keras
+*.weights.h5
+claude-code-setup.zip
+# Credentials: never in the repo (Kaggle CLI reads ~/.kaggle/kaggle.json, the Hub reads HF_TOKEN)
+kaggle.json
+.kaggle/
+.claude/settings.local.json
+# Superseded and unused code kept locally only (v1/v2 scorer, MLM pretraining, HTML report)
+/archive/
+# Kaggle notebooks: local working copies of the src/ code (outputs come back via fetch_outputs.py)
+/notebooks/kaggle/*.ipynb
+# Local Kaggle downloads (fetch_outputs.py copies what is needed into checkpoints/, data/, results/)
+/results_*/
+# results/: per-seed predictions and reports stay local; the tables, metrics, manifests and
+# histories behind the published models are tracked.
+/results/*
+!/results/tables/
+!/results/kaggle/
+!/results/data/
+!/results/tokenizer/
+!/results/model2_cleanup/
+!/results/model1_v3_E1/
+!/results/model1_v3_E4/
+!/results/model1_v3_eval.json
+/results/**/test_predictions.jsonl
+/results/**/*.DS_Store
+/results/tables/model1.md
+/results/tables/model1_preview.md
+/results/tables/model1_v1.md
+/notebooks/
+/test/test_notebooks.py

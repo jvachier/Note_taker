@@ -1,0 +1,41 @@
+name: Feature or experiment
+description: Propose a feature, an experiment or a change to the plan.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        [PLAN.md](../blob/main/PLAN.md) is the source of truth for data, architectures,
+        losses, metrics and hyperparameters. Changes to it are discussed here first.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - New experiment or ablation
+        - Change to data, architecture or training (PLAN.md)
+        - Demo app feature
+        - Release, docs or tooling
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or question
+      description: What is missing, or which question the experiment answers.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would change. For experiments, the config change and the metric that decides.
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: Cost and constraints
+      description: |
+        GPU time on Kaggle (T4, 12 h sessions), local smoke-run time, and whether it keeps the
+        rules (Keras 3 + JAX, no pretrained weights in our models, teachers only on Kaggle).

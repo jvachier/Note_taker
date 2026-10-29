@@ -1,0 +1,191 @@
+{
+  "stage": "model1_notes",
+  "smoke": false,
+  "config": {
+    "seed": 0,
+    "max_hours": 11,
+    "min_hours_to_start": 0.5,
+    "base": {
+      "max_hours": 11,
+      "corpus": {
+        "revision": "v1.0",
+        "text_field": "sentence_text",
+        "sources": [
+          "synthetic",
+          "synthetic_hn",
+          "ami"
+        ]
+      },
+      "data": {
+        "max_sentence_tokens": 64,
+        "max_sentences": 256,
+        "window_overlap": 64,
+        "max_meetings": null,
+        "sentence_buckets": [
+          32,
+          64,
+          128,
+          256
+        ],
+        "hard_negative_oversample": 2
+      },
+      "model": {
+        "vocab_size": 16000,
+        "d_model": 384,
+        "num_layers": 6,
+        "meeting_layers": 2,
+        "num_heads": 6,
+        "ffn_dim": 1536,
+        "max_len": 512,
+        "num_speakers": 8,
+        "dropout": 0.1,
+        "init_std": 0.02,
+        "num_zones": 5,
+        "num_reasons": 9,
+        "num_span_tags": 5
+      },
+      "loss": {
+        "importance": 1.0,
+        "zone": 0.5,
+        "spans": 0.3,
+        "qwen_kl": 0.5,
+        "roberta_kl": 0.5,
+        "reason": 0.3,
+        "depends_on": 0.3,
+        "temperature": 2.0,
+        "zone_class_weights": "inverse_sqrt"
+      },
+      "optimizer": {
+        "name": "adamw",
+        "lr_sentence_encoder": 0.0001,
+        "lr_meeting": 0.0005,
+        "warmup_fraction": 0.1,
+        "schedule": "cosine",
+        "weight_decay": 0.01
+      },
+      "inference": {
+        "zone_calibration": "ami",
+        "zone_threshold_grid": [
+          0.005,
+          0.5,
+          0.005
+        ]
+      },
+      "training": {
+        "sentences_per_batch": 2048,
+        "epochs": 15,
+        "max_steps": null,
+        "mixed_precision": "mixed_float16",
+        "data_parallel": false,
+        "early_stopping": {
+          "monitor": "val_loss",
+          "mode": "min",
+          "patience": 2
+        }
+      }
+    },
+    "variants": {
+      "model1_v3_E4": {
+        "teachers": [
+          "qwen",
+          "roberta"
+        ]
+      },
+      "model1_v3_E1": {
+        "teachers": [],
+        "loss": {
+          "qwen_kl": 0.0,
+          "roberta_kl": 0.0,
+          "reason": 0.0,
+          "depends_on": 0.0
+        }
+      },
+      "model1_v3_ER": {
+        "teachers": [
+          "roberta"
+        ],
+        "loss": {
+          "qwen_kl": 0.0,
+          "reason": 0.0,
+          "depends_on": 0.0
+        }
+      }
+    },
+    "runs": [
+      [
+        "model1_v3_E4",
+        0
+      ],
+      [
+        "model1_v3_E1",
+        0
+      ],
+      [
+        "model1_v3_E4",
+        1
+      ],
+      [
+        "model1_v3_E1",
+        1
+      ],
+      [
+        "model1_v3_E4",
+        2
+      ],
+      [
+        "model1_v3_E1",
+        2
+      ]
+    ]
+  },
+  "model": {
+    "vocab_size": 16000,
+    "d_model": 384,
+    "num_layers": 6,
+    "meeting_layers": 2,
+    "num_heads": 6,
+    "ffn_dim": 1536,
+    "max_len": 512,
+    "num_speakers": 8,
+    "dropout": 0.1,
+    "init_std": 0.02,
+    "num_zones": 5,
+    "num_reasons": 9,
+    "num_span_tags": 5
+  },
+  "gate": {
+    "split": "validation",
+    "sentences": 25335,
+    "coverage": 0.8346,
+    "importance_f1": 0.3653,
+    "keyword_f1": 0.0891,
+    "lead_f1": 0.3129,
+    "lead_fraction": 0.5,
+    "hard_negative_fp": 0.5735,
+    "keyword_hard_negative_fp": 0.0237,
+    "reason_zone_agreement": 0.0673,
+    "passed": true
+  },
+  "status": {
+    "model1_v3_E4/seed_0": "complete",
+    "model1_v3_E1/seed_0": "complete",
+    "model1_v3_E4/seed_1": "complete",
+    "model1_v3_E1/seed_1": "complete",
+    "model1_v3_E4/seed_2": "complete",
+    "model1_v3_E1/seed_2": "complete"
+  },
+  "complete_seeds": {
+    "model1_v3_E4": [
+      0,
+      1,
+      2
+    ],
+    "model1_v3_E1": [
+      0,
+      1,
+      2
+    ]
+  },
+  "finished_all": true,
+  "hours": 1.38
+}

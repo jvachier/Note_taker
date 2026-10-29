@@ -1,0 +1,21 @@
+name: tokenizer
+description: Shared uncased WordPiece tokenizer for both models.
+seed: 0
+vocab_size: 16000
+min_frequency: 2           # not in PLAN: `tokenizers` library default
+limit_alphabet: 1000       # not in PLAN: `tokenizers` library default (rarer chars -> [UNK])
+lowercase: true
+strip_accents: true
+clean_text: true
+handle_chinese_chars: true # not in PLAN: BERT default
+wordpieces_prefix: "##"
+# Order fixes the IDs: [PAD]=0, [UNK]=1, [CLS]=2, [SEP]=3, [MASK]=4, [S1]..[S8]=5..12.
+special_tokens: ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]",
+                 "[S1]", "[S2]", "[S3]", "[S4]", "[S5]", "[S6]", "[S7]", "[S8]"]
+corpus: [wikitext_train, dialogsum_train]
+report_sources: [wikitext_test, dialogsum_test]
+max_items_per_source: null
+paths:
+  raw_dir: data/raw
+  output_dir: data/tokenizer
+  report_path: results/tokenizer/report.json

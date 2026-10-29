@@ -1,0 +1,18 @@
+name: data
+description: Download WikiText-103 (raw) and DialogSum with their official splits.
+seed: 0
+wikitext:
+  hf_path: Salesforce/wikitext
+  hf_config: wikitext-103-raw-v1
+  revision: b08601e04326c79dfdd32d625aee71d232d685c3
+  splits: [train, validation, test]
+  drop_train_articles_in: [validation, test]
+dialogsum:
+  hf_path: knkarthick/dialogsum
+  revision: a968e7aee0602e257935f1321a02e4287f7d5848
+  splits: [train, validation, test]
+  max_speakers: 8
+  drop_train_duplicates_of: [validation, test]
+paths:
+  raw_dir: data/raw
+  stats_path: results/data/stats.json

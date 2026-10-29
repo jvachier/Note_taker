@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1270" height="300" viewBox="0 0 1270 300" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<title>From a raw transcript to meeting notes</title>
+<defs><marker id='arrow' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='7' markerHeight='7' orient='auto-start-reverse'><path d='M0,0 L10,5 L0,10 z' fill='#6b6a65'/></marker></defs>
+<rect x="0.5" y="0.5" width="1269" height="299" rx="16" fill="#ffffff" stroke="#e1e0d9"/>
+<text x="32" y="42" font-size="21" fill="#1f1f1d" font-weight="700" text-anchor="start">From a raw transcript to meeting notes</text>
+<text x="32" y="66" font-size="13.5" fill="#6b6a65" font-weight="400" text-anchor="start">What the demo app runs, left to right. Blue boxes are the two trained models; purple boxes are fixed rules.</text>
+<rect x="32" y="108" width="180" height="128" rx="10" fill="#f5f5f2" stroke="#c9c8c0" stroke-width="1.5"/>
+<text x="122.0" y="149.25" font-size="14.5" fill="#1f1f1d" font-weight="700" text-anchor="middle">Transcript</text>
+<text x="122.0" y="169.75" font-size="12.5" fill="#52514e" font-weight="400" text-anchor="middle">one line per turn</text>
+<text x="122.0" y="187.75" font-size="12.0" fill="#52514e" font-weight="400" text-anchor="middle" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">a: so did you talk</text>
+<text x="122.0" y="205.75" font-size="12.0" fill="#52514e" font-weight="400" text-anchor="middle" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">to the landlord…</text>
+<rect x="242" y="108" width="180" height="128" rx="10" fill="#2a78d6" stroke="#2a78d6" stroke-width="1.5"/>
+<text x="332.0" y="149.25" font-size="14.5" fill="#ffffff" font-weight="700" text-anchor="middle">Model 2 · Cleanup</text>
+<text x="332.0" y="169.75" font-size="12.5" fill="#e6f0fc" font-weight="400" text-anchor="middle">restores punctuation</text>
+<text x="332.0" y="187.75" font-size="12.5" fill="#e6f0fc" font-weight="400" text-anchor="middle">and casing, per turn</text>
+<text x="332.0" y="205.75" font-size="12.5" fill="#e6f0fc" font-weight="400" text-anchor="middle">7.3M params</text>
+<path d="M215,172.0 L239,172.0" fill="none" stroke="#6b6a65" stroke-width="1.6" marker-end="url(#arrow)"/>
+<rect x="452" y="108" width="180" height="128" rx="10" fill="#f2eefb" stroke="#7b5cc4" stroke-width="1.5"/>
+<text x="542.0" y="149.25" font-size="14.5" fill="#4b2f97" font-weight="700" text-anchor="middle">Sentence split</text>
+<text x="542.0" y="169.75" font-size="12.5" fill="#4d3d73" font-weight="400" text-anchor="middle">after . ! ? followed by</text>
+<text x="542.0" y="187.75" font-size="12.5" fill="#4d3d73" font-weight="400" text-anchor="middle">a capital, digit</text>
+<text x="542.0" y="205.75" font-size="12.5" fill="#4d3d73" font-weight="400" text-anchor="middle">or quote</text>
+<path d="M425,172.0 L449,172.0" fill="none" stroke="#6b6a65" stroke-width="1.6" marker-end="url(#arrow)"/>
+<rect x="662" y="108" width="180" height="128" rx="10" fill="#2a78d6" stroke="#2a78d6" stroke-width="1.5"/>
+<text x="752.0" y="149.25" font-size="14.5" fill="#ffffff" font-weight="700" text-anchor="middle">Model 1 · Notes</text>
+<text x="752.0" y="169.75" font-size="12.5" fill="#e6f0fc" font-weight="400" text-anchor="middle">reads the whole meeting,</text>
+<text x="752.0" y="187.75" font-size="12.5" fill="#e6f0fc" font-weight="400" text-anchor="middle">scores every sentence</text>
+<text x="752.0" y="205.75" font-size="12.5" fill="#e6f0fc" font-weight="400" text-anchor="middle">20.9M params</text>
+<path d="M635,172.0 L659,172.0" fill="none" stroke="#6b6a65" stroke-width="1.6" marker-end="url(#arrow)"/>
+<rect x="872" y="108" width="180" height="128" rx="10" fill="#f2eefb" stroke="#7b5cc4" stroke-width="1.5"/>
+<text x="962.0" y="149.25" font-size="14.5" fill="#4b2f97" font-weight="700" text-anchor="middle">Selection rules</text>
+<text x="962.0" y="169.75" font-size="12.5" fill="#4d3d73" font-weight="400" text-anchor="middle">keep if importance ≥ 0.40</text>
+<text x="962.0" y="187.75" font-size="12.5" fill="#4d3d73" font-weight="400" text-anchor="middle">zone thresholds</text>
+<text x="962.0" y="205.75" font-size="12.5" fill="#4d3d73" font-weight="400" text-anchor="middle">attach replies · owners</text>
+<path d="M845,172.0 L869,172.0" fill="none" stroke="#6b6a65" stroke-width="1.6" marker-end="url(#arrow)"/>
+<rect x="1082" y="108" width="180" height="128" rx="10" fill="#e9f6ee" stroke="#2e9b57" stroke-width="1.5"/>
+<text x="1172.0" y="149.25" font-size="14.5" fill="#1c6b3a" font-weight="700" text-anchor="middle">Meeting notes</text>
+<text x="1172.0" y="169.75" font-size="12.5" fill="#2d5a3d" font-weight="400" text-anchor="middle">Decisions</text>
+<text x="1172.0" y="187.75" font-size="12.5" fill="#2d5a3d" font-weight="400" text-anchor="middle">Action items (owner, due)</text>
+<text x="1172.0" y="205.75" font-size="12.5" fill="#2d5a3d" font-weight="400" text-anchor="middle">Key points</text>
+<path d="M1055,172.0 L1079,172.0" fill="none" stroke="#6b6a65" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="332.0" y="96" font-size="11.5" fill="#6b6a65" font-weight="400" text-anchor="middle" font-style="italic">optional, for raw speech-to-text</text>
+<rect x="32" y="265" width="16" height="14" rx="3" fill="#2a78d6" stroke="#2a78d6" stroke-width="1.5"/>
+<text x="54" y="276" font-size="12" fill="#52514e" font-weight="400" text-anchor="start">trained model</text>
+<rect x="147.8" y="265" width="16" height="14" rx="3" fill="#f2eefb" stroke="#7b5cc4" stroke-width="1.5"/>
+<text x="169.8" y="276" font-size="12" fill="#52514e" font-weight="400" text-anchor="start">fixed rule</text>
+<rect x="243.8" y="265" width="16" height="14" rx="3" fill="#f5f5f2" stroke="#c9c8c0" stroke-width="1.5"/>
+<text x="265.8" y="276" font-size="12" fill="#52514e" font-weight="400" text-anchor="start">input</text>
+<rect x="306.8" y="265" width="16" height="14" rx="3" fill="#e9f6ee" stroke="#2e9b57" stroke-width="1.5"/>
+<text x="328.8" y="276" font-size="12" fill="#52514e" font-weight="400" text-anchor="start">output</text>
+</svg>

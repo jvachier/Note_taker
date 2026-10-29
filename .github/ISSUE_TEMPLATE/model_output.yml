@@ -1,0 +1,56 @@
+name: Model output
+description: A model runs, but its output is wrong (missed decision, wrong owner, bad punctuation...).
+labels: ["model-quality"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Examples of wrong outputs help us measure and fix weaknesses. Known limits are listed
+        in the model cards: Model 1 is extractive (it never writes new text) and is weak on
+        decisions spread over several turns.
+
+        **Do not paste real meetings with personal or confidential information.** Rewrite
+        names and details first.
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      options:
+        - Meeting notes (meeting-notes-en-21m)
+        - Punctuation and casing (punctuation-casing-en-7m)
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: Input
+      description: 'The transcript or text, one `Name: text` line per turn for meeting notes.'
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output you got
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: The notes, labels or punctuation you think are right, and why.
+    validations:
+      required: true
+  - type: checkboxes
+    id: settings
+    attributes:
+      label: Settings
+      options:
+        - label: '"Restore punctuation & casing first" was on (meeting notes)'
+        - label: The keep threshold was changed from the default
+  - type: input
+    id: where
+    attributes:
+      label: Where you ran it
+      description: Demo app, `example.py`, or your own code; Hub revision if known.

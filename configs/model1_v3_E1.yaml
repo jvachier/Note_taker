@@ -1,0 +1,15 @@
+base: model1_v3.yaml
+name: model1_v3_E1
+description: Control - gold labels only, same architecture (PLAN.md 10.5).
+seeds: [0]
+paths:
+  output_dir: checkpoints/model1_v3_E1
+teachers: []
+loss:
+  qwen_kl: 0.0
+  roberta_kl: 0.0
+  reason: 0.0
+  depends_on: 0.0
+inference:
+  postprocess:
+    use_pointer: false       # E1 never learns depends_on (no Qwen links): its pointer is untrained

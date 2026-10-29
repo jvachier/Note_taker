@@ -16,7 +16,6 @@ The notebooks in [`notebooks/kaggle/`](../../../notebooks/kaggle/):
 | Notebook | What it runs |
 |---|---|
 | `model2_cleanup.ipynb` | Model 2: data, tokenizer, training (3 seeds), evaluation |
-| `model1_scorer.ipynb` | Model 1 v1/v2 (superseded) and the MLM pretraining of the sentence encoder used by v3 |
 | `model1_teachers.ipynb` | Model 1 v3 teachers: Qwen3-0.6B labels (own vLLM environment), fine-tuned RoBERTa-Large and DistilBERT |
 | `model1_notes.ipynb` | Model 1 v3 students: E1 (gold only, released) and E4 (with teachers), 3 seeds each |
 

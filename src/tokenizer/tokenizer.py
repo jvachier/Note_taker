@@ -24,13 +24,6 @@ TOKENIZER_FILE = "tokenizer.json"
 VOCAB_FILE = "vocab.txt"
 
 
-def speaker_token_id(speaker: int) -> int:
-    """Token ID of ``[S<speaker>]`` for a 1-based speaker number."""
-    if not 1 <= speaker <= NUM_SPEAKERS:
-        raise ValueError(f"Speaker {speaker} outside 1..{NUM_SPEAKERS}")
-    return MASK_ID + speaker
-
-
 def check_special_tokens(tokenizer: Tokenizer) -> None:
     """Raise ``ValueError`` if special tokens do not have their fixed IDs."""
     for expected_id, token in enumerate(SPECIAL_TOKENS):

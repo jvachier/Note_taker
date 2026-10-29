@@ -11,15 +11,12 @@ dependencies = [
     "tokenizers>=0.20",
     "datasets>=3.0",
     "pyyaml>=6.0",
-    "scipy>=1.13",
     "rouge-score>=0.1.2",
     "huggingface-hub>=0.25",
     "pyarrow>=15.0",
 ]
 
 [project.optional-dependencies]
-# BERTScore pulls in PyTorch, so it stays out of the default (training) environment.
-eval = ["bert-score>=0.3.13"]
 # Dash demo app (app/), also installed in the Docker image.
 app = ["dash>=3.0", "gunicorn>=23.0"]
 # Kaggle GPU runtime.

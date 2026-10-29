@@ -1,6 +1,6 @@
 ---
 name: kaggle-stage
-description: Turn one pipeline stage (tokenizer, Model 2 training, MLM pretraining, teacher labelling, student training, evaluation) into a Kaggle notebook that runs on GPU, checkpoints, resumes and saves its outputs. Use when asked to run, prepare or package a stage for Kaggle.
+description: Turn one pipeline stage (tokenizer, Model 2 training, teacher labelling, student training, evaluation) into a Kaggle notebook that runs on GPU, checkpoints, resumes and saves its outputs. Use when asked to run, prepare or package a stage for Kaggle.
 ---
 
 # Kaggle stage
@@ -9,9 +9,9 @@ Kaggle limits: 12 h per session, ~30 GPU-hours per week. Every notebook must sur
 cut off and resumed.
 
 ## One self-contained notebook per model
-- `model2_cleanup.ipynb` (Model 2), `model1_scorer.ipynb` (Model 1 v1/v2 and the MLM encoder
-  that v3 starts from), `model1_teachers.ipynb` (v3 teachers and baselines) and
-  `model1_notes.ipynb` (v3 students), all in `notebooks/kaggle/`. Each runs its whole stage:
+- `model2_cleanup.ipynb` (Model 2), `model1_teachers.ipynb` (Model 1 teachers and baselines)
+  and `model1_notes.ipynb` (Model 1 students), all in `notebooks/kaggle/`. Model 1's MLM
+  sentence encoder is an earlier Kaggle output used as is (its notebook is archived). Each runs its whole stage:
   data, arrays, training, evaluation, results table.
 - **Not connected to this repo**: no `src` imports, no `git clone`, no embedded or generated
   repo code, no `configs/` files. All code is written in the notebook's own cells and every
@@ -57,9 +57,6 @@ cut off and resumed.
 - v3 (`model1_teachers.ipynb`): Qwen3-0.6B in thinking mode, plus RoBERTa-Large and DistilBERT
   fine-tuned with KerasHub on JAX (no PyTorch). The venv is built with uv (`python -m venv`
   fails on Kaggle).
-- v1/v2 (`model1_scorer.ipynb`): `Qwen/Qwen2.5-14B-Instruct-AWQ` or `Qwen/Qwen2.5-1.5B-Instruct`
-  (reference summary in the prompt, 0-3 scale, 3 samples at temperature 0.7 merged per
-  dialogue; greedy retry).
 - Write labels incrementally (JSONL, one dialogue per line) and skip dialogues already labelled,
   so a cut-off session resumes where it stopped.
 - If vLLM fails to install, fall back to `transformers` + `bitsandbytes` 4-bit and say so.

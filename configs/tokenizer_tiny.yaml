@@ -1,8 +1,0 @@
-base: tokenizer.yaml
-name: tokenizer_tiny
-description: CPU smoke test for tokenizer training (small corpus, must finish in < 2 minutes).
-vocab_size: 2000
-max_items_per_source: 5000
-paths:
-  output_dir: data/tokenizer_tiny
-  report_path: data/tokenizer_tiny/report.json

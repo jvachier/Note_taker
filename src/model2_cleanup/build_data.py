@@ -89,11 +89,6 @@ def save_set(out_dir: Path, arrays: EncodedWindows, meta: dict[str, Any]) -> Non
     )
 
 
-def load_noise_vocab(processed_dir: Path) -> list[str]:
-    """Read ``noise_vocab.txt`` (one word form per line, most frequent first)."""
-    return (processed_dir / "noise_vocab.txt").read_text(encoding="utf-8").split("\n")[:-1]
-
-
 def build_noise_vocab(cfg: dict[str, Any], raw_dir: Path, processed_dir: Path) -> list[str]:
     """Top-k word forms over the train sources (each counted once, not oversampled)."""
     data = cfg["data"]

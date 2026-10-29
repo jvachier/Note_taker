@@ -36,10 +36,8 @@ import keras
 
 import src.model1_notes.losses  # noqa: F401  (registers the custom objects for loading)
 import src.model1_notes.model  # noqa: F401
-import src.model1_scorer.model  # noqa: F401  (registers the custom layers for loading)
 import src.model2_cleanup.model  # noqa: F401
 from src.config import load_config
-from src.eval.human_eval import best_seed
 
 log = logging.getLogger(__name__)
 NAMESPACE_PLACEHOLDER = "<hf-user>"
@@ -60,8 +58,6 @@ def inference_settings(
             "window_words": run_cfg["data"]["window_words"],
             "max_len": run_cfg["data"]["max_len"],
         }
-    if kind == "scorer":
-        return {"max_len": run_cfg["model"]["max_len"], "top_k": run_cfg["inference"]["top_k"]}
     if kind == "notes":
         metrics = metrics or {}
         return {
@@ -76,6 +72,21 @@ def inference_settings(
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def best_seed(results_dir: Path, name: str, metric: tuple[str, ...]) -> tuple[int, float]:
+    """``(seed, value)`` of the seed with the highest validation ``metric``."""
+    best: tuple[int, float] | None = None
+    for path in sorted((results_dir / name).glob("seed_*/metrics.json")):
+        value: Any = json.loads(path.read_text())
+        for key in metric:
+            value = value[key]
+        seed = int(path.parent.name.split("_")[1])
+        if best is None or float(value) > best[1]:
+            best = (seed, float(value))
+    if best is None:
+        raise FileNotFoundError(f"No seed_*/metrics.json under {results_dir / name}")
+    return best
 
 
 def fill_namespace(folder: Path, namespace: str | None) -> None:

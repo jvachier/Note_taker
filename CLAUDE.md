@@ -5,7 +5,9 @@ Two small transformer models built **from scratch** and published on Hugging Fac
 - **Model 1 – Meeting notes** (v3, PLAN.md §10): hierarchical student that extracts decisions,
   action items and key points from meetings. Trained on the gold-labelled corpus
   `meeting-notes-extractive-v1` (separate repo) and distilled from Qwen3-0.6B's reasoning and a
-  fine-tuned RoBERTa-Large. The v1/v2 DialogSum scorer (`src/model1_scorer/`) is kept as history.
+  fine-tuned RoBERTa-Large (released: run E1, gold labels only). Its sentence encoder is a
+  pretrained Kaggle output (`checkpoints/mlm/encoder.keras`). The superseded v1/v2 DialogSum
+  scorer and the MLM pretraining code are in the git-ignored `archive/` (history in PLAN.md).
 
 `PLAN.md` is the source of truth for data, tokenizer, architectures, losses, hyperparameters,
 metrics and tests. Read it before writing code. If something here conflicts with PLAN.md, ask.
@@ -29,14 +31,14 @@ metrics and tests. Read it before writing code. If something here conflicts with
 - **Teachers and baselines** (Qwen3-0.6B, RoBERTa-Large, DistilBERT) run **only on Kaggle, only in
   the Model 1 teacher notebook** (Notebook 1), never in the student training environment:
   - Qwen runs in its own virtual environment (vLLM). Reference code lives in
-    `src/model1_notes/teacher/` (and `src/model1_scorer/teacher/` for v1/v2), tested locally
+    `src/model1_notes/teacher/`, tested locally
     with a fake teacher.
   - RoBERTa-Large and DistilBERT are fine-tuned there with KerasHub on the JAX backend (no
     PyTorch).
   - Only their cached outputs (`.npy` / Parquet) reach Notebook 2. Their weights are never
     part of our published models.
 - Never download Qwen, RoBERTa-Large or DistilBERT locally.
-- BERTScore and ROUGE are evaluation-only; never import them in training code.
+- ROUGE is evaluation-only; never import it in training code.
 
 ## Data and configs
 - Raw and processed data live in `data/` (git-ignored). Never commit data, checkpoints or tokens.
@@ -59,7 +61,7 @@ metrics and tests. Read it before writing code. If something here conflicts with
 ## Layout
 ```
 configs/  src/data/  src/tokenizer/  src/layers/  src/model2_cleanup/
-src/model1_scorer/  src/model1_notes/  src/eval/  notebooks/kaggle/  results/  tests/
+src/model1_notes/  src/eval/  src/publish/  app/  notebooks/kaggle/  results/  tests/
 ```
 
 ## Skills in this repo (`.claude/skills/`)

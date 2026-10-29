@@ -18,7 +18,6 @@ from src.tokenizer.tokenizer import (
     check_special_tokens,
     encode_words,
     load_tokenizer,
-    speaker_token_id,
 )
 from src.tokenizer.train import main, tokenizer_report, train_tokenizer
 
@@ -42,9 +41,7 @@ def tokenizer(request):
 def test_special_token_ids_fixed(tokenizer):
     assert [tokenizer.token_to_id(t) for t in SPECIAL_TOKENS] == list(range(13))
     assert (PAD_ID, UNK_ID, CLS_ID, SEP_ID, MASK_ID) == (0, 1, 2, 3, 4)
-    assert [speaker_token_id(s) for s in (1, 8)] == [5, 12]
-    with pytest.raises(ValueError):
-        speaker_token_id(9)
+    assert [tokenizer.token_to_id(f"[S{s}]") for s in (1, 8)] == [5, 12]
 
 
 def test_config_special_tokens_match_code(configs_dir):
@@ -53,8 +50,8 @@ def test_config_special_tokens_match_code(configs_dir):
 
 def test_speaker_tokens_survive_lowercasing(tokenizer):
     enc = tokenizer.encode("[S1] hello [S8] there", add_special_tokens=False)
-    assert enc.ids[0] == speaker_token_id(1)
-    assert speaker_token_id(8) in enc.ids
+    assert enc.ids[0] == tokenizer.token_to_id("[S1]")
+    assert tokenizer.token_to_id("[S8]") in enc.ids
 
 
 def test_round_trip_lowercase_text(tokenizer):

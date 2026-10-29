@@ -1,6 +1,6 @@
 ---
 name: run-experiment
-description: Create and run a training or evaluation experiment (Model 2, MLM pretraining, Model 1 v3 runs E1/E4, ablations) with a versioned config and multiple seeds, then record mean ± std in the results tables. Use when asked to train, compare, ablate or add a row to the results.
+description: Create and run a training or evaluation experiment (Model 2, Model 1 v3 runs E1/E4, ablations) with a versioned config and multiple seeds, then record mean ± std in the results tables. Use when asked to train, compare, ablate or add a row to the results.
 ---
 
 # Run an experiment

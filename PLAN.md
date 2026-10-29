@@ -585,6 +585,19 @@ Steps 4–5 wait for the corpus v1.0 release.
     `train.py`.
   - The teacher array format (aligned to the processed sentence rows) is fixed in the
     `train.py` docstring. The Notebook 1 export must write it.
+- 2026-10-29, **Repository slimmed to the published models (approved).**
+  - Kept: what builds, evaluates and serves `punctuation-casing-en-7m` and
+    `meeting-notes-en-21m`, including the v3 teachers, baselines and run E4 (rows of the
+    published table).
+  - Moved to the git-ignored `archive/`: the v1/v2 DialogSum scorer (`src/model1_scorer`: students,
+    oracle, Qwen2.5 teachers, evaluation), the MLM pretraining code and its notebook
+    `model1_scorer.ipynb`, the HTML report, run ER (never rerun on corpus v1.1), their configs
+    and tests.
+  - The MLM sentence encoder is kept as a Kaggle output only (`checkpoints/mlm/encoder.keras`, run
+    manifest `results/kaggle/manifest_model1_scorer.json`); `src/model1_notes/model.py` loads it
+    and checks its architecture.
+  - Removed as unused: Spearman / Jaccard metrics and SciPy, BERTScore and the `eval` extra,
+    `GatherPositions`, `speaker_token_id`, `load_noise_vocab`, `baseline_config`.
 - 2026-10-29, **v1.1 results, balanced zone calibration and release choice (approved).**
   - E1 and E4 × 3 seeds on corpus v1.1. AMI test importance F1: **E1 0.578 ± 0.006**,
     E4 0.567 ± 0.006 (DistilBERT 0.580, RoBERTa-Large 0.634). Distillation gave no measurable

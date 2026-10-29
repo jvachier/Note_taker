@@ -99,9 +99,14 @@ def test_model2_matches_plan(configs_dir):
     assert cfg["training"]["batch_size"] == 128
 
 
-def test_model1_encoder_matches_plan_and_mlm(configs_dir):
-    mlm = load_config(configs_dir / "mlm.yaml")["model"]
-    student = load_config(configs_dir / "model1_student_A.yaml")["model"]
+def test_model1_encoder_matches_the_pretrained_mlm_encoder(configs_dir):
+    """The v3 sentence encoder loads the MLM encoder pretrained on Kaggle; its architecture is
+    recorded in that run's manifest (results/kaggle/manifest_model1_scorer.json)."""
+    import json
+
+    manifest = configs_dir.parent / "results" / "kaggle" / "manifest_model1_scorer.json"
+    mlm = json.loads(manifest.read_text())["model"]
+    v3 = load_config(configs_dir / "model1_v3.yaml")["model"]
     keys = [
         "vocab_size",
         "d_model",
@@ -111,32 +116,8 @@ def test_model1_encoder_matches_plan_and_mlm(configs_dir):
         "max_len",
         "num_speakers",
     ]
-    assert [mlm[k] for k in keys] == [student[k] for k in keys]
-    assert [mlm[k] for k in keys] == [16000, 384, 6, 6, 1536, 512, 8]
-    assert 15e6 < _encoder_params(mlm) < 19e6
-
-
-def test_students_differ_only_in_targets(configs_dir):
-    a, b, c, d, e = (load_config(configs_dir / f"model1_student_{s}.yaml") for s in "ABCDE")
-    assert a["model"] == b["model"] == c["model"] == d["model"] == e["model"]
-    assert [x["targets"]["source"] for x in (a, b, c, e)] == [
-        "qwen14b",
-        "qwen1_5b",
-        "oracle_soft",
-        "qwen14b",
-    ]
-    assert c["targets"]["use_tags"] is False
-    assert d["init"] == "random" and d["targets"] == a["targets"]
-    assert e["targets"]["blend"] == {
-        "labels_dir": "data/labels/oracle",
-        "source": "oracle_soft",
-        "weight": 0.5,
-    }
-    teachers = load_config(configs_dir / "teacher.yaml")["teachers"]
-    assert {a["targets"]["source"], b["targets"]["source"]} == set(teachers)
-    for cfg in (a, b, c, d, e):
-        assert cfg["seeds"] == [0, 1, 2]
-        assert cfg["training"]["early_stopping"]["monitor"] == "val_loss"
+    assert [v3[k] for k in keys] == [mlm[k] for k in keys] == [16000, 384, 6, 6, 1536, 512, 8]
+    assert 15e6 < _encoder_params(v3) < 19e6
 
 
 MODEL_TINY = sorted(p.name for p in CONFIG_FILES if "_tiny" in p.name and "tokenizer" not in p.name)

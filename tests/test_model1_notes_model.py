@@ -10,13 +10,13 @@ import pytest
 from keras import ops
 
 from src.config import deep_merge, load_config
+from src.layers.transformer import TransformerEncoder
 from src.model1_notes import train
 from src.model1_notes.data import REASONS, SPLITS, NotesSet, build_split, sentence_rows
 from src.model1_notes.encoder_teachers import write_logits
 from src.model1_notes.losses import NotesImportanceLoss, ZoneLoss
 from src.model1_notes.model import NEG, build_notes_model, load_sentence_encoder
 from src.model1_notes.tiny_corpus import write_tiny_corpus
-from src.model1_scorer.mlm_model import build_mlm_model, encoder_model
 from src.tokenizer.tokenizer import CLS_ID, PAD_ID, SEP_ID, load_tokenizer
 
 SMALL = {
@@ -77,14 +77,36 @@ def test_save_load_round_trip(tmp_path):
         np.testing.assert_allclose(np.asarray(value), np.asarray(loaded(x)[key]), atol=1e-6)
 
 
+def pretrained_encoder(cfg: dict) -> keras.Model:
+    """A stand-in for the Kaggle MLM output ``encoder.keras``: a functional model
+    ``{token_ids, speaker_ids} -> hidden`` around a layer named ``encoder``."""
+    keys = (
+        "vocab_size",
+        "max_len",
+        "d_model",
+        "num_layers",
+        "num_heads",
+        "ffn_dim",
+        "dropout",
+        "init_std",
+        "num_speakers",
+    )
+    encoder = TransformerEncoder(**{k: cfg[k] for k in keys}, name="encoder")
+    token_ids = keras.Input(shape=(None,), dtype="int32", name="token_ids")
+    speaker_ids = keras.Input(shape=(None,), dtype="int32", name="speaker_ids")
+    hidden = encoder(token_ids, speaker_ids)
+    return keras.Model({"token_ids": token_ids, "speaker_ids": speaker_ids}, hidden)
+
+
 def test_load_sentence_encoder_from_mlm(tmp_path):
-    mlm_cfg = {k: SMALL[k] for k in SMALL if k not in ("meeting_layers",)}
-    mlm = build_mlm_model({**mlm_cfg, "tie_embeddings": True})
-    encoder_model(mlm).save(tmp_path / "encoder.keras")
+    pretrained = pretrained_encoder(SMALL)
+    pretrained.save(tmp_path / "encoder.keras")
     model = build_notes_model(SMALL, max_sentences=16, sentence_tokens=8)
     load_sentence_encoder(model, tmp_path / "encoder.keras")
     for a, b in zip(
-        model.get_layer("encoder").get_weights(), mlm.encoder.get_weights(), strict=True
+        model.get_layer("encoder").get_weights(),
+        pretrained.get_layer("encoder").get_weights(),
+        strict=True,
     ):
         np.testing.assert_array_equal(a, b)
     with pytest.raises(ValueError, match="mismatch"):

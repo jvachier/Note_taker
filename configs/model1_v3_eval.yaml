@@ -7,7 +7,7 @@ paths:
   results_dir: results                      # students: results/<name>/seed_<n>/
   checkpoints_dir: checkpoints              # students: checkpoints/<name>/seed_<n>/best.keras
   tables_dir: results/tables
-students: [model1_v3_E1, model1_v3_ER, model1_v3_E4]
+students: [model1_v3_E1, model1_v3_E4]
 teachers:                                   # name -> display name, parameters
   qwen: {display: "Qwen3-0.6B (teacher)", params: 600000000}
   roberta: {display: "RoBERTa-Large (fine-tuned, ceiling)", params: 355000000}

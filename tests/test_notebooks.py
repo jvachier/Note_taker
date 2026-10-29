@@ -19,11 +19,10 @@ from pathlib import Path
 
 import pytest
 
-from src.layers import embeddings, heads, transformer
+from src.layers import embeddings, transformer
 from src.model1_notes import encoder_teachers
 from src.model1_notes import losses as notes_losses
 from src.model1_notes import model as notes_model
-from src.model1_scorer import losses, mlm_model
 from src.training import LayerwiseAdamW
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,13 +32,6 @@ CORE = (
     embeddings.TokenAndPositionEmbedding,
     transformer.TransformerEncoderBlock,
     transformer.TransformerEncoder,
-)
-MODEL1 = (
-    mlm_model.MLMHead,
-    mlm_model.MLMPretrainer,
-    heads.GatherPositions,
-    losses.ImportanceLoss,
-    LayerwiseAdamW,
 )
 
 
@@ -75,17 +67,15 @@ MODEL1_TEACHERS = (encoder_teachers.SentenceMeanPool, encoder_teachers.SentenceB
 # Registered classes each notebook defines (same names and constructor arguments as src/).
 EXPECTED = {
     "model1_notes": CORE + MODEL1_NOTES,
-    "model1_scorer": CORE + MODEL1,
     "model1_teachers": MODEL1_TEACHERS,
     "model2_cleanup": CORE,
 }
 
 
 def test_notebooks_per_model():
-    """Model 2 and Model 1 v1/v2 have one notebook; Model 1 v3 has two (teachers, student)."""
+    """Model 2 has one notebook; Model 1 has two (teachers, student)."""
     assert [p.name for p in NOTEBOOKS] == [
         "model1_notes.ipynb",
-        "model1_scorer.ipynb",
         "model1_teachers.ipynb",
         "model2_cleanup.ipynb",
     ]
@@ -125,20 +115,6 @@ def test_notebook_classes_match_src(path):
         assert _init_params(code, cls.__name__) == args, cls.__name__
     n = code.count('register_keras_serializable(package="dialogue_models")')
     assert n == len(expected)
-
-
-def test_model1_notebook_teacher_runs_outside_jax():
-    """Teachers run as a subprocess (own venv) before the notebook imports JAX."""
-    code = _code(KAGGLE / "model1_scorer.ipynb")
-    assert (
-        code.index("TEACHER_SCRIPT = r'''")
-        < code.index("subprocess.run(cmd, env=env)")
-        < code.index("import jax")
-    )
-    script = code[
-        code.index("TEACHER_SCRIPT = r'''") : code.index("'''\n", code.index("TEACHER_SCRIPT"))
-    ]
-    assert "import jax" not in script and "import keras" not in script
 
 
 def test_model1_teachers_notebook_runs_qwen_outside_jax():
@@ -208,53 +184,6 @@ def test_model2_notebook_smoke_run_and_load_here(tmp_path):
     out = model.predict(np.array([ids], dtype=np.int32), verbose=0)
     assert out["casing"].shape == (1, len(ids), 3) and out["punct"].shape == (1, len(ids), 4)
     assert json.loads((work / "manifest_model2_cleanup.json").read_text())["complete_seeds"] == [0]
-
-
-@RUN
-def test_model1_notebook_smoke_run_and_load_here(tmp_path):
-    import keras
-    import numpy as np
-
-    import src.layers.heads  # noqa: F401  (registers the classes the models need)
-    import src.model1_scorer.losses  # noqa: F401
-    import src.training  # noqa: F401
-    from src.model1_scorer.data import StudentSet, load_targets
-    from src.model1_scorer.model import build_student, load_encoder_weights
-    from src.model1_scorer.train import model_inputs
-    from src.tokenizer.tokenizer import load_tokenizer
-
-    work = _execute(KAGGLE / "model1_scorer.ipynb", tmp_path)
-    manifest = json.loads((work / "manifest_model1_scorer.json").read_text())
-    assert manifest["finished_all"]
-    assert all(seeds == [0] for seeds in manifest["complete_seeds"].values())
-    ckpt = work / "checkpoints"
-    load_tokenizer(ckpt / "model1_tokenizer")
-
-    # The notebook's students and MLM encoder load and run with src/.
-    test = StudentSet.load(work / "data" / "processed" / "model1" / "test")
-    student = keras.saving.load_model(ckpt / "model1_student_A" / "seed_0" / "best.keras")
-    out = student.predict(model_inputs(test, np.arange(2)), verbose=0)
-    assert out["importance"].shape[0] == 2 and out["tags"].shape[-1] == 4
-    model_cfg = manifest["model"]
-    fresh = build_student(model_cfg, use_tags=True)
-    load_encoder_weights(fresh, ckpt / "mlm" / "encoder.keras")
-
-    # Its labels and predictions are in the formats src/ reads.
-    for source in ("qwen14b", "qwen1_5b", "oracle", "oracle_soft"):
-        labels = work / "data" / "labels" / ("oracle" if source.startswith("oracle") else source)
-        targets = load_targets(labels, "test", test, source)
-        assert targets.labelled.all()
-    oracle = work / "data" / "labels" / "oracle"
-    blend = {"labels_dir": oracle, "source": "oracle_soft", "weight": 0.5}
-    labels = work / "data" / "labels" / "qwen14b"
-    assert load_targets(labels, "test", test, "qwen14b", blend=blend).labelled.all()
-    first_label = json.loads((labels / "test.jsonl").read_text().splitlines()[0])
-    assert first_label["samples"] == 2 and max(first_label["raw_scores"]) <= 3
-    assert manifest["label_version"] == 2
-    preds = work / "results" / "model1_student_A" / "seed_0" / "test_predictions.jsonl"
-    first = json.loads(preds.read_text().splitlines()[0])
-    assert set(first) == {"id", "scores", "tags"}
-    assert (work / "results" / "tables" / "model1_preview.md").exists()
 
 
 @RUN

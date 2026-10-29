@@ -38,18 +38,6 @@ def test_macro_skips_classes_never_present_nor_predicted():
     assert rep["macro_f1"] == pytest.approx((2 / 3 + 0.0) / 2)
 
 
-def test_spearman_hand_checked():
-    from src.eval.metrics import jaccard, mean_spearman, spearman
-
-    assert spearman([1, 2, 3], [10, 20, 30]) == pytest.approx(1.0)
-    assert spearman([3, 2, 1], [10, 20, 30]) == pytest.approx(-1.0)
-    # ranks [1,2,3,4] vs [1,3,2,4]: 1 - 6*2/(4*15) = 0.8
-    assert spearman([1, 2, 3, 4], [1, 3, 2, 4]) == pytest.approx(0.8)
-    assert spearman([1, 1, 1], [1, 2, 3]) is None and spearman([5], [5]) is None
-    assert mean_spearman([[1, 2, 3], [1, 1, 1]], [[1, 2, 3], [3, 2, 1]]) == pytest.approx(1.0)
-    assert jaccard([0, 1, 2], [1, 2, 3]) == pytest.approx(0.5) and jaccard([], []) == 1.0
-
-
 def test_rouge_multi_reference_is_the_mean():
     from rouge_score.rouge_scorer import RougeScorer
 

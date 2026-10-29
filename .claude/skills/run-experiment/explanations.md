@@ -12,7 +12,6 @@ difference counts only if it is larger than the spread across seeds.
 
 Examples from this project:
 - the Model 2 noise levels;
-- the v1/v2 students A–D, including the D ablation without MLM pretraining;
 - the v3 runs E1 (gold labels only) and E4 (gold plus teacher distillation).
 
 ## When it runs

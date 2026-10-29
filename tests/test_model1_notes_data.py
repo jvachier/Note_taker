@@ -172,7 +172,7 @@ def test_bucket_for():
 
 
 def test_configs_load(configs_dir):
-    for name in ("model1_v3", "model1_v3_E4", "model1_v3_E1", "model1_v3_ER", "model1_v3_tiny"):
+    for name in ("model1_v3", "model1_v3_E4", "model1_v3_E1", "model1_v3_tiny"):
         cfg = load_config(configs_dir / f"{name}.yaml")
         data = cfg["data"]
         assert max(data["sentence_buckets"]) == data["max_sentences"]
@@ -181,9 +181,6 @@ def test_configs_load(configs_dir):
     e1 = load_config(configs_dir / "model1_v3_E1.yaml")
     assert e1["teachers"] == [] and e1["loss"]["qwen_kl"] == 0.0
     assert load_config(configs_dir / "model1_v3_E4.yaml")["teachers"] == ["qwen", "roberta"]
-    er = load_config(configs_dir / "model1_v3_ER.yaml")
-    assert er["teachers"] == ["roberta"] and er["loss"]["qwen_kl"] == 0.0
-    assert er["loss"]["roberta_kl"] > 0 and er["loss"]["reason"] == 0.0
 
 
 def test_tiny_pipeline_all_splits(tmp_path, tokenizer, corpus, configs_dir):
@@ -193,14 +190,6 @@ def test_tiny_pipeline_all_splits(tmp_path, tokenizer, corpus, configs_dir):
     for split in SPLITS:
         counts = build_split(tokenizer, cfg, split, tmp_path / split)
         assert counts["meetings"] == 3 and counts["sentences"] == 36
-
-
-def test_sentence_encoder_matches_mlm(configs_dir):
-    """The v3 sentence encoder must load the MLM checkpoint (PLAN.md 10.4)."""
-    mlm = load_config(configs_dir / "mlm.yaml")["model"]
-    v3 = load_config(configs_dir / "model1_v3.yaml")["model"]
-    for key in ("vocab_size", "d_model", "num_layers", "num_heads", "ffn_dim", "max_len"):
-        assert v3[key] == mlm[key], key
 
 
 def test_sentence_rows_maps_keys_to_rows(tmp_path, tokenizer, corpus):

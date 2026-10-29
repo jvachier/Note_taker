@@ -13,12 +13,14 @@ link. It downloads the latest output of the notebook with the Kaggle CLI
 the parts listed in ``PULL`` to the same relative paths here:
 
     model2_cleanup  checkpoints/model2/ (best.keras per seed, tokenizer), results/
-    model1_scorer   checkpoints/{mlm,model1_student_*,model1_tokenizer}/, results/,
-                    data/labels/{qwen14b,qwen1_5b,oracle}/
     model1_teachers data/labels/model1_v3/ (Qwen, RoBERTa, DistilBERT tables, gate, raw thoughts)
     model1_notes    checkpoints/model1_v3_*/, results/
 
 Resume-only state (``backup/``) is skipped. The notebook manifest goes to ``results/kaggle/``.
+
+Model 1's sentence encoder is an earlier Kaggle output used as is:
+``checkpoints/mlm/encoder.keras`` (masked-language-model pretraining; its run manifest is
+``results/kaggle/manifest_model1_scorer.json``).
 """
 
 from __future__ import annotations
@@ -35,8 +37,6 @@ ROOT = Path(__file__).resolve().parents[2]
 # What each notebook brings back: relative paths inside its output (= inside the repo).
 PULL: dict[str, list[str]] = {
     "model2_cleanup": ["checkpoints/model2", "results"],
-    # MLM encoder, students, tokenizer; results; teacher + oracle labels (for the evaluation).
-    "model1_scorer": ["checkpoints", "results", "data/labels"],
     # Model 1 v3: teacher outputs (Notebook 1), students and their results (Notebook 2).
     "model1_teachers": ["data/labels/model1_v3"],
     "model1_notes": ["checkpoints", "results"],

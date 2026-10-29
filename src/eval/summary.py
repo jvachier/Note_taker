@@ -27,22 +27,3 @@ def rouge(
         for t in ROUGE_TYPES:
             totals[t].append(np.mean([s[t].fmeasure for s in scores]))
     return {t: float(np.mean(v)) if v else 0.0 for t, v in totals.items()}
-
-
-def bertscore(
-    predictions: Sequence[str],
-    references: Sequence[Sequence[str]],
-    model_type: str = "roberta-large",
-    batch_size: int = 32,
-) -> float:
-    """Mean BERTScore F1 (``bert_score``, best reference per dialogue, no baseline rescaling)."""
-    from bert_score import score
-
-    _, _, f1 = score(
-        list(predictions),
-        [list(r) for r in references],
-        model_type=model_type,
-        batch_size=batch_size,
-        verbose=False,
-    )
-    return float(f1.mean())

@@ -233,6 +233,11 @@ claude-code-setup.zip
 kaggle.json
 .kaggle/
 .claude/settings.local.json
+# Superseded and unused code kept locally only (v1/v2 scorer, MLM pretraining, HTML report)
+/archive/
+# Kaggle notebooks: local working copies of the src/ code (outputs come back via fetch_outputs.py)
+/notebooks/kaggle/*.ipynb
+/tests/test_notebooks.py
 # Local Kaggle downloads (fetch_outputs.py copies what is needed into checkpoints/, data/, results/)
 /results_*/
 # results/: per-seed predictions and reports stay local; the tables, metrics, manifests and
@@ -251,3 +256,5 @@ kaggle.json
 /results/tables/model1.md
 /results/tables/model1_preview.md
 /results/tables/model1_v1.md
+/notebooks/
+/test/test_notebooks.py

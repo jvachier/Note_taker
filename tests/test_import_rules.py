@@ -8,14 +8,12 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 APP = ROOT / "app"
-TEACHER_DIRS = (SRC / "model1_scorer" / "teacher", SRC / "model1_notes" / "teacher")
+TEACHER_DIRS = (SRC / "model1_notes" / "teacher",)
 EVAL_DIR = SRC / "eval"
 
 BANNED_EVERYWHERE = {"torch", "tensorflow", "tensorflow_text", "tf_keras"}
 EVAL_ONLY = {"bert_score", "rouge_score"}
 TEACHER_ONLY = {"vllm", "transformers", "bitsandbytes", "awq"}
-# Oracle labels (PLAN 5.4) are computed with ROUGE, outside the training code.
-ROUGE_ALLOWED = {SRC / "model1_scorer" / "oracle.py"}
 
 
 def _top_level_imports(path: Path) -> set[str]:
@@ -40,8 +38,7 @@ def test_import_rules(path):
     if not any(path.is_relative_to(d) for d in TEACHER_DIRS):
         assert not imports & TEACHER_ONLY, f"teacher-only import outside teacher/: {path}"
     if not path.is_relative_to(EVAL_DIR):
-        allowed = {"rouge_score"} if path in ROUGE_ALLOWED else set()
-        assert not (imports & EVAL_ONLY) - allowed, f"eval-only import in {path}"
+        assert not imports & EVAL_ONLY, f"eval-only import in {path}"
 
 
 def test_scanner_detects_imports(tmp_path):
@@ -63,8 +60,6 @@ def test_teacher_code_never_imports_jax_or_keras(path):
     "module",
     [
         "src.model2_cleanup.train",
-        "src.model1_scorer.mlm_train",
-        "src.model1_scorer.train",
         "src.model1_notes.train",
     ],
 )

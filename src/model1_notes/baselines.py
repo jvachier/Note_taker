@@ -13,7 +13,6 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Sequence
-from typing import Any
 
 ZONE_DISCUSSION, ZONE_DECISION, ZONE_ACTION = "discussion", "decision", "action_item"
 
@@ -61,8 +60,3 @@ def tune_lead(meetings: Sequence[Sequence[int]], grid: Sequence[float]) -> tuple
         if f1 > best[1]:
             best = (fraction, f1)
     return best
-
-
-def baseline_config(cfg: dict[str, Any]) -> dict[str, Any]:
-    """The ``baselines`` section of a v3 config."""
-    return cfg["baselines"]

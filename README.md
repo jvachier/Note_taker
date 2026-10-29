@@ -136,8 +136,10 @@ uv run python -m src.eval.aggregate --exp model2_cleanup                       #
 
 **Model 1 – Meeting notes, v3** (PLAN.md §10). Training data is the gold-labelled corpus
 `meeting-notes-extractive-v1` ([Hugging Face](https://huggingface.co/datasets/Jvachier/meeting-notes-extractive-v1), [Kaggle](https://www.kaggle.com/datasets/jvachier/meeting-notes-extractive-v1))
-(v1.1, in `data/raw/meeting_notes_v1_1/`). The sentence encoder starts from the MLM checkpoint
-`checkpoints/mlm/encoder.keras` (`notebooks/kaggle/model1_scorer.ipynb`).
+(v1.1, in `data/raw/meeting_notes_v1_1/`). The sentence encoder starts from
+`checkpoints/mlm/encoder.keras`, an earlier Kaggle output: an encoder pretrained by masked-language
+modelling on WikiText-103 and DialogSum. Its run manifest is
+[`results/kaggle/manifest_model1_scorer.json`](results/kaggle/manifest_model1_scorer.json).
 1. `model1_teachers.ipynb`: teacher and baseline outputs (Qwen3-0.6B, fine-tuned RoBERTa-Large
    and DistilBERT), cached as Parquet. Only needed for the distillation run E4 and the baseline
    rows.
@@ -150,10 +152,6 @@ uv run python -m src.model1_notes.train --config configs/model1_v3_E1.yaml --all
 uv run python -m src.model1_notes.calibrate --config configs/model1_v3_E1.yaml --seed 1   # re-tune zones
 uv run python -m src.model1_notes.evaluate --config configs/model1_v3_eval.yaml --latency # results table
 ```
-
-`uv run python -m src.eval.report` writes an interactive HTML report to
-`results/report/index.html`. It covers Model 2 and the v1/v2 scorer; Model 1 v3 results are in
-the tables above.
 
 ## Release
 
@@ -178,9 +176,8 @@ src/data/            dataset download and splits (WikiText-103, DialogSum)
 src/tokenizer/       WordPiece tokenizer
 src/layers/          shared Keras layers (pre-LN transformer, embeddings)
 src/model2_cleanup/  Model 2
-src/model1_notes/    Model 1 v3 (current): data, model, training, calibration, notes, teachers
-src/model1_scorer/   Model 1 v1/v2 (DialogSum utterance scorer, superseded; also the MLM encoder)
-src/eval/            metrics, results tables, HTML report
+src/model1_notes/    Model 1: data, model, training, calibration, notes, teachers
+src/eval/            metrics and results tables
 src/publish/         release packaging and Hub files
 results/             tracked tables, metrics and manifests
 tests/               pytest suite

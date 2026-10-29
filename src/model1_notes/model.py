@@ -26,10 +26,20 @@ import keras
 from keras import ops
 
 from src.layers.transformer import TransformerEncoder, TransformerEncoderBlock
-from src.model1_scorer.model import load_encoder_weights
 from src.tokenizer.tokenizer import PAD_ID
 
 NEG = -1e9
+# Architecture keys the pretrained sentence encoder must share with the student.
+ENCODER_KEYS = (
+    "vocab_size",
+    "max_len",
+    "d_model",
+    "num_layers",
+    "num_heads",
+    "ffn_dim",
+    "init_std",
+    "num_speakers",
+)
 MODEL_KEYS = (
     "vocab_size",
     "max_len",
@@ -218,5 +228,12 @@ def build_notes_model(
 
 
 def load_sentence_encoder(model: NotesModel, checkpoint: str | Path) -> None:
-    """Copy the MLM ``encoder.keras`` weights into the sentence encoder (same architecture)."""
-    load_encoder_weights(model, checkpoint)
+    """Copy the pretrained ``encoder.keras`` (the MLM sentence encoder, a Kaggle output) into
+    the sentence encoder. The architecture must match; dropout may differ (it has no weights).
+    """
+    pretrained = keras.saving.load_model(checkpoint).get_layer("encoder")
+    target = model.get_layer("encoder")
+    have, want = pretrained.get_config(), target.get_config()
+    if diff := {k: (have[k], want[k]) for k in ENCODER_KEYS if have[k] != want[k]}:
+        raise ValueError(f"Encoder architecture mismatch (checkpoint, student): {diff}")
+    target.set_weights(pretrained.get_weights())

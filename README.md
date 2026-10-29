@@ -60,9 +60,30 @@ owner and the deadline.
 
 ## Use the models
 
+Both models are on Hugging Face, each with its model card, `modeling.py` and `example.py`:
+- Model 2 – Cleanup: [Jvachier/punctuation-casing-en-7m](https://huggingface.co/Jvachier/punctuation-casing-en-7m)
+- Model 1 – Meeting notes: [Jvachier/meeting-notes-en-21m](https://huggingface.co/Jvachier/meeting-notes-en-21m)
+
 ```bash
 pip install "keras>=3.6" jax tokenizers huggingface_hub
 ```
+
+**Model 2 – Cleanup:**
+
+```python
+import sys
+from huggingface_hub import snapshot_download
+
+folder = snapshot_download("Jvachier/punctuation-casing-en-7m")
+sys.path.insert(0, folder)
+import modeling  # the model's own code, shipped in the repo
+
+cleaner = modeling.Cleaner.from_folder(folder)
+print(cleaner("are you coming to the party tonight i can pick you up at eight"))
+# Are you coming to the party tonight? I can pick you up at eight.
+```
+
+**Model 1 – Meeting notes:**
 
 ```python
 import sys
@@ -78,13 +99,16 @@ print(
 )
 ```
 
-Each Hub repo has an `example.py`. For raw transcripts, the meeting-notes example first runs the
-cleanup model.
+Run each example in its own Python process: both repos ship a module named `modeling`. For raw
+transcripts, the meeting-notes `example.py` runs the cleanup model first and shows how to load
+both in one process.
 
 ## Demo app
 
 A Dash app with both models: punctuation restoration, and meeting notes from a transcript (one
 `Name: text` line per turn), with a chart of every sentence's importance.
+
+![Demo: Model 2 restores punctuation in a voice note, then Model 1 turns a raw transcript into decisions, action items and key points](docs/figures/app_demo.webp)
 
 ```bash
 export HF_NAMESPACE=Jvachier     # the Hub account hosting the models (or put it in a .env file)
@@ -168,7 +192,7 @@ and seed), `results.md`, and the hand-written model card, `modeling.py` and `exa
 ```
 app/                 Dash demo (loads the released models)
 configs/             one YAML per run; *_tiny.yaml = CPU smoke runs
-docs/figures/        architecture figures used in this README (SVG)
+docs/figures/        architecture figures (SVG) and the app demo (animated WebP) in this README
 notebooks/kaggle/    fetch_outputs.py: brings Kaggle run outputs back into the repo
 src/data/            dataset download and splits (WikiText-103, DialogSum)
 src/tokenizer/       WordPiece tokenizer

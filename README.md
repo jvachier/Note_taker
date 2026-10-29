@@ -35,6 +35,27 @@ Both run on CPU. Headline results (test sets, mean ± std over 3 seeds):
 describe the data, training, limitations and licences.
 [PLAN.md](PLAN.md) is the full design and the log of every decision.
 
+## How the models work
+
+The demo app chains both models. Model 2 is optional and only needed for raw speech-to-text.
+Fixed rules turn Model 1's per-sentence predictions into notes.
+
+![Pipeline: transcript, Model 2 cleanup, sentence split, Model 1 meeting notes, selection rules, notes](docs/figures/pipeline.svg)
+
+**Model 2 – Cleanup** is a token-classification transformer. It reads lowercase words without
+punctuation and predicts, for every word, its casing and the punctuation mark that follows it.
+It never adds, removes or corrects words.
+
+![Model 2 architecture: WordPiece tokens, embeddings, 4 pre-LayerNorm transformer blocks, casing and punctuation heads](docs/figures/model2_cleanup.svg)
+
+**Model 1 – Meeting notes** is hierarchical. A sentence encoder, pretrained by masked-language
+modelling, reads each sentence on its own. A meeting encoder then lets the sentence vectors
+attend to each other, so a sentence is judged in the context of the whole meeting. Per-sentence
+heads predict whether the sentence belongs in the notes and its zone. A per-token head finds the
+owner and the deadline.
+
+![Model 1 architecture: per-sentence encoder, meeting encoder over sentence vectors, importance, zone and span heads](docs/figures/model1_notes.svg)
+
 ## Use the models
 
 ```bash
@@ -149,6 +170,7 @@ and seed), `results.md`, and the hand-written model card, `modeling.py` and `exa
 ```
 app/                 Dash demo (loads the released models)
 configs/             one YAML per run; *_tiny.yaml = CPU smoke runs
+docs/figures/        architecture figures used in this README (SVG)
 notebooks/kaggle/    self-contained Kaggle notebooks + fetch_outputs.py
 src/data/            dataset download and splits (WikiText-103, DialogSum)
 src/tokenizer/       WordPiece tokenizer

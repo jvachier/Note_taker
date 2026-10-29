@@ -182,7 +182,8 @@ uv run pre-commit install                        # run the same checks before ev
 
 CI ([`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) runs `pre-commit run --all-files`
 on every pull request and push to `main`: YAML/TOML checks, a large-file guard, ruff, ruff
-format and pytest.
+format and pytest. It is skipped when a change touches only documentation (Markdown, `docs/`,
+`LICENSE`, `CITATION.cff`, `.claude/`), and can be started by hand from the Actions tab.
 
 Every hyperparameter lives in [`configs/`](configs/). A config can inherit from another with
 `base: <file>.yaml`; `src.config.load_config` returns the resolved dict. Data, checkpoints and

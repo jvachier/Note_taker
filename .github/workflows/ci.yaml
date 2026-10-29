@@ -1,9 +1,23 @@
 name: CI
 
 on:
+  # Skipped when a change touches only documentation (no test or hook reads these files).
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
+      - "CITATION.cff"
+      - ".claude/**"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
+      - "CITATION.cff"
+      - ".claude/**"
+  workflow_dispatch: # run it by hand from the Actions tab
 
 permissions:
   contents: read

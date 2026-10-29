@@ -24,11 +24,10 @@ WordPiece tokenizer, own architectures, no pretrained weights), and a demo app t
 | **Model 1 – Meeting notes** | Picks the sentences of a meeting that matter and sorts them into decisions, action items (owner, deadline) and key points | 20.9M params, 84 MB | [meeting-notes-en-21m](https://huggingface.co/Jvachier/meeting-notes-en-21m) |
 
 Both run on CPU. Headline results (test sets, mean ± std over 3 seeds):
-- **Cleanup:** punctuation macro-F1 0.789 ± 0.001 and casing accuracy 0.965 on DialogSum
-  ([table](results/tables/model2_cleanup.md)).
+- **Cleanup:** punctuation macro-F1 0.789 ± 0.001 and casing accuracy 0.965 on DialogSum.
 - **Meeting notes:** importance F1 0.578 ± 0.006 on real AMI meetings, on par with a fine-tuned
-  DistilBERT (0.580, 3× larger) and below RoBERTa-Large (0.634, 17× larger)
-  ([table](results/tables/model1_v3.md)). Model 1 is extractive: it selects sentences, it does
+  DistilBERT (0.580, 3× larger) and below RoBERTa-Large (0.634, 17× larger); see
+  [Results](#results). Model 1 is extractive: it selects sentences, it does
   not write new text.
 
 The model cards describe the data, training, limitations and licences. Model 1 is trained on
@@ -57,6 +56,56 @@ heads predict whether the sentence belongs in the notes and its zone. A per-toke
 owner and the deadline.
 
 ![Model 1 architecture: per-sentence encoder, meeting encoder over sentence vectors, importance, zone and span heads](docs/figures/model1_notes.svg)
+
+## Results
+
+Test sets, mean ± std over 3 seeds. Every system is scored on the same sentences, and every
+threshold is tuned on validation.
+
+**Model 1 – Meeting notes** against the gold labels of `meeting-notes-extractive-v1`.
+**AMI = real meetings (the headline)**; *Synth* = the synthetic meetings. Importance F1: is the
+sentence in the notes? HN FP: share of hard negatives (sentences that look important but are
+not) wrongly kept, lower is better.
+
+| System | Params | Pretrained | AMI importance F1 | AMI PR-AUC | Synth importance F1 | Synth HN FP ↓ | Synth zone F1 |
+|---|---|---|---|---|---|---|---|
+| Lead-k (first sentences) | – | – | 0.319 | – | 0.337 | 0.490 | – |
+| Keyword rule | – | – | 0.029 | – | 0.136 | 0.000 | 0.247 |
+| Qwen3-0.6B (prompted, teacher) | 600M | yes | 0.318 | 0.210 | 0.403 | 0.585 | 0.194 |
+| DistilBERT (fine-tuned) | 66M | yes | 0.580 | 0.555 | 0.870 | 0.187 | – |
+| RoBERTa-Large (fine-tuned, teacher) | 355M | yes | **0.634** | **0.641** | **0.903** | 0.070 | – |
+| E4: ours + distillation (Qwen, RoBERTa) | 20.9M | no | 0.567 ± 0.006 | 0.552 ± 0.014 | 0.884 ± 0.006 | 0.154 ± 0.029 | 0.609 ± 0.062 |
+| **E1: ours, gold labels only (released)** | **20.9M** | **no** | 0.578 ± 0.006 | 0.550 ± 0.005 | 0.878 ± 0.013 | 0.142 ± 0.044 | **0.620 ± 0.039** |
+
+- From scratch and with a third of the parameters, the released model **matches the fine-tuned
+  DistilBERT** on real meetings (0.578 vs 0.580). It is **5.6 points below RoBERTa-Large**,
+  which is 17× larger and pretrained on far more text.
+- **Distillation did not help**: E4, trained with the Qwen and RoBERTa teachers, is slightly
+  below E1, so the released model uses the gold labels only.
+- Only our models predict zones (decision, action item, …) and owner / deadline spans (F1
+  0.81 ± 0.07 on synthetic). Decision and action-item F1 on AMI stay below 0.1 for every
+  system: real decisions are rare, implicit and spread over many turns.
+- CPU latency (Apple M2): ~0.4 s for a 100-sentence meeting, ~2.2 s for 500 sentences.
+
+Full table, with ROUGE against the AMI summaries and per-zone scores:
+[results/tables/model1_v3.md](results/tables/model1_v3.md).
+
+**Model 2 – Cleanup**, word level, against the original punctuation and casing. Noise = share
+of words corrupted to imitate speech-to-text errors. The rule baseline capitalises the first
+word and "i" and ends each window with a period.
+
+| Test set | Noise | System | Punct macro-F1 | Comma F1 | Period F1 | Question F1 | Casing acc |
+|---|---|---|---|---|---|---|---|
+| DialogSum | 0% | Rule baseline | 0.093 | 0.000 | 0.280 | 0.000 | 0.876 |
+| DialogSum | 0% | **Model 2** | **0.789 ± 0.001** | 0.670 ± 0.002 | 0.850 ± 0.001 | 0.846 ± 0.002 | **0.965 ± 0.000** |
+| DialogSum | 20% | **Model 2** | 0.662 ± 0.004 | 0.565 ± 0.003 | 0.740 ± 0.002 | 0.679 ± 0.006 | 0.937 ± 0.000 |
+| WikiText | 0% | Rule baseline | 0.191 | 0.000 | 0.574 | 0.000 | 0.814 |
+| WikiText | 0% | **Model 2** | **0.671 ± 0.014** | 0.733 ± 0.001 | 0.896 ± 0.002 | 0.383 ± 0.044 | **0.976 ± 0.000** |
+| WikiText | 20% | **Model 2** | 0.557 ± 0.009 | 0.603 ± 0.002 | 0.784 ± 0.002 | 0.284 ± 0.031 | 0.945 ± 0.000 |
+
+All noise levels (0 / 5 / 10 / 20%) and per-class casing scores:
+[results/tables/model2_cleanup.md](results/tables/model2_cleanup.md). The WikiText test set
+has only 12 question marks, so its question F1 is not reliable.
 
 ## Use the models
 
@@ -133,7 +182,8 @@ uv run pre-commit install                        # run the same checks before ev
 
 CI ([`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) runs `pre-commit run --all-files`
 on every pull request and push to `main`: YAML/TOML checks, a large-file guard, ruff, ruff
-format and pytest.
+format and pytest. It is skipped when a change touches only documentation (Markdown, `docs/`,
+`LICENSE`, `CITATION.cff`, `.claude/`), and can be started by hand from the Actions tab.
 
 Every hyperparameter lives in [`configs/`](configs/). A config can inherit from another with
 `base: <file>.yaml`; `src.config.load_config` returns the resolved dict. Data, checkpoints and

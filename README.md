@@ -193,3 +193,27 @@ tests/               pytest suite
   See the model cards.
 - The Claude Code skills used to build this project are in [`.claude/skills/`](.claude/skills/).
   Each has an `explanations.md`.
+
+## Citation
+
+If you use this code or the models, please cite:
+
+```bibtex
+@software{vachier2026notetaker,
+  author  = {Vachier, Jeremy},
+  title   = {Note\_taker: From-Scratch Transformers for Punctuation Restoration and Extractive Meeting Notes},
+  year    = {2026},
+  note    = {Models: punctuation-casing-en-7m and meeting-notes-en-21m on the Hugging Face Hub}
+}
+```
+
+GitHub's **Cite this repository** button gives the same reference ([CITATION.cff](CITATION.cff)).
+Please also cite the data the models were trained on:
+
+```bibtex
+@misc{vachier2026meetingnotes,
+  author = {Vachier, Jeremy},
+  title  = {meeting-notes-extractive-v1: Sentence-Labelled Meeting Transcripts for Extractive Note-Taking},
+  year   = {2026}
+}
+```

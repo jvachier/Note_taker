@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this code or the models, please cite it as below."
+title: "Note_taker: From-Scratch Transformers for Punctuation Restoration and Extractive Meeting Notes"
+type: software
+authors:
+  - family-names: Vachier
+    given-names: Jeremy
+version: 1.0.0
+date-released: 2026-10-29
+license: MIT
+keywords:
+  - keras
+  - jax
+  - transformers-from-scratch
+  - meeting-notes
+  - extractive-summarization
+  - punctuation-restoration
+  - truecasing
+abstract: >-
+  Two small transformer models built from scratch with Keras 3 on the JAX backend: a 7.3M-parameter
+  model that restores punctuation and casing in speech-to-text output, and a 20.9M-parameter
+  hierarchical model that extracts decisions, action items and key points from meeting
+  transcripts. Published on the Hugging Face Hub as punctuation-casing-en-7m and
+  meeting-notes-en-21m.

@@ -237,7 +237,6 @@ kaggle.json
 /archive/
 # Kaggle notebooks: local working copies of the src/ code (outputs come back via fetch_outputs.py)
 /notebooks/kaggle/*.ipynb
-/tests/test_notebooks.py
 # Local Kaggle downloads (fetch_outputs.py copies what is needed into checkpoints/, data/, results/)
 /results_*/
 # results/: per-seed predictions and reports stay local; the tables, metrics, manifests and

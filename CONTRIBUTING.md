@@ -45,22 +45,15 @@ uv run ruff check . --fix && uv run ruff format .
 Both must pass. CI runs `pre-commit run --all-files` (YAML/TOML checks, large-file guard,
 ruff, ruff format, pytest) on Python 3.11.
 
-If you change a Kaggle notebook, or `src/` code that a notebook copies, also run the notebooks
-in smoke mode on CPU:
-
-```bash
-XLA_FLAGS=--xla_force_host_platform_device_count=2 RUN_NOTEBOOKS=1 uv run pytest tests/test_notebooks.py
-```
-
 ## Code contributions
 
 - Keep modules small and readable, with type hints and docstrings. Every new module gets
   tests in `tests/`. Tests run offline on CPU, with tiny models and no downloads.
 - New experiments get their own config inheriting from an existing one (`base: <file>.yaml`)
   and a `*_tiny.yaml` smoke config that runs in under two minutes on CPU.
-- The Kaggle notebooks in `notebooks/kaggle/` are self-contained copies of the `src/` logic.
-  When you change one, update the other by hand; `tests/test_notebooks.py` checks that their
-  layer classes match. Commit notebooks without outputs.
+- `src/` is the only training code in the repository. Kaggle notebooks are local working
+  copies and are git-ignored; never commit them. Their outputs come back with
+  `notebooks/kaggle/fetch_outputs.py`.
 - The Hub files in `src/publish/hub/<model>/` (model card, `modeling.py`, `example.py`) ship
   with the published models. `modeling.py` must give the same outputs as the repo code.
 - Follow the existing style (ruff, line length 100).

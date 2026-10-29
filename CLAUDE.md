@@ -43,6 +43,8 @@ metrics and tests. Read it before writing code. If something here conflicts with
 ## Data and configs
 - Raw and processed data live in `data/` (git-ignored). Never commit data, checkpoints or tokens.
 - Pre-tokenize to `int32` NumPy arrays (`.npy`, memory-mapped). Training reads arrays, not text.
+- `src/` is the only committed training code. Kaggle notebooks are local copies, git-ignored
+  (`notebooks/kaggle/*.ipynb`); unused or superseded code goes to the git-ignored `archive/`.
 - Every hyperparameter lives in `configs/*.yaml`. No hard-coded hyperparameters in `src/`.
 - Every run takes a `seed` and sets it for Python, NumPy and Keras (`keras.utils.set_random_seed`).
 - Splits: official DialogSum and WikiText splits; for Model 1 v3, the corpus's own splits

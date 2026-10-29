@@ -9,10 +9,11 @@ Kaggle limits: 12 h per session, ~30 GPU-hours per week. Every notebook must sur
 cut off and resumed.
 
 ## One self-contained notebook per model
-- `model2_cleanup.ipynb` (Model 2), `model1_teachers.ipynb` (Model 1 teachers and baselines)
-  and `model1_notes.ipynb` (Model 1 students), all in `notebooks/kaggle/`. Model 1's MLM
-  sentence encoder is an earlier Kaggle output used as is (its notebook is archived). Each runs its whole stage:
-  data, arrays, training, evaluation, results table.
+- **Local only, never committed**: notebooks live in `notebooks/kaggle/` and are git-ignored;
+  `src/` is the only training code in the repository. The notebooks used so far
+  (`model2_cleanup`, `model1_teachers`, `model1_notes`) are kept in the git-ignored `archive/`.
+  Model 1's MLM sentence encoder is an earlier Kaggle output used as is. Each notebook runs its
+  whole stage: data, arrays, training, evaluation, results table.
 - **Not connected to this repo**: no `src` imports, no `git clone`, no embedded or generated
   repo code, no `configs/` files. All code is written in the notebook's own cells and every
   hyperparameter is in its `CONFIG` cell. Upload the `.ipynb`, set accelerator + Internet,
@@ -20,8 +21,7 @@ cut off and resumed.
 - The code is an independent copy of the logic in `src/`; when one changes, update the other
   by hand. The one hard contract is the saved model: custom layers registered under
   `dialogue_models` with the same class names and constructor arguments as `src/layers`, so the
-  repo loads the `.keras` files (`tests/test_notebooks.py` checks this).
-- Commit notebooks without outputs.
+  repo loads the `.keras` files.
 - Fail fast on inputs: check attachments and downloads in the first cells, before any GPU
   work. Batch sessions cannot attach models. Reuse partial outputs instead of rerunning a
   finished step.
@@ -68,10 +68,11 @@ run: `uv run python notebooks/kaggle/fetch_outputs.py <notebook>` downloads the 
 to the same paths here; the manifest goes to `results/kaggle/`. Add new notebooks to `PULL`.
 
 ## Before uploading
-- `XLA_FLAGS=--xla_force_host_platform_device_count=2 RUN_NOTEBOOKS=1 uv run pytest
-  tests/test_notebooks.py`: executes the notebooks in smoke mode on CPU **with 2 simulated
-  devices** (the same data-parallel batch splitting as Kaggle's T4 x2, so uneven batches fail
-  here, not on Kaggle) and loads the outputs with `src/`.
+- Run the notebook locally in smoke mode (`SMOKE=1`, `WORK_DIR` set) on CPU with
+  `XLA_FLAGS=--xla_force_host_platform_device_count=2` (2 simulated devices: the same
+  data-parallel batch splitting as Kaggle's T4 x2, so uneven batches fail here, not on
+  Kaggle), then load its outputs with `src/`. The archived `archive/tests/test_notebooks.py`
+  does this for the archived notebooks.
 - With data parallelism every batch must split evenly: datasets pad a partial last batch with
   zero-weight rows, and prediction pads to whole batches and drops the padding.
 - `uv run pytest -q` and lint pass.

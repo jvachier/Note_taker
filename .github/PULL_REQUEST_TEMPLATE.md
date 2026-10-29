@@ -24,8 +24,6 @@
 
 If relevant:
 
-- [ ] Kaggle notebooks updated to match `src/`, and
-      `RUN_NOTEBOOKS=1 uv run pytest tests/test_notebooks.py` passes.
 - [ ] Results reported as mean ± std over seeds, with baselines; the table in
       `results/tables/` is regenerated. Model selection used validation only.
 - [ ] Hub `modeling.py` gives the same outputs as the repo code.

@@ -23,7 +23,7 @@ app = ["dash>=3.0", "gunicorn>=23.0"]
 cuda = ["jax[cuda12]>=0.4.34"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.6", "plotly>=5.24", "pre-commit>=3.8", "nbclient>=0.10", "nbformat>=5.10", "ipykernel>=6.29"]
+dev = ["pytest>=8.0", "ruff>=0.6", "plotly>=5.24", "pre-commit>=3.8"]
 
 [build-system]
 requires = ["hatchling"]
@@ -43,8 +43,8 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-# Self-contained Kaggle notebooks (notebook style; tested in tests/test_notebooks.py).
-extend-exclude = ["notebooks/kaggle/*.ipynb"]
+# Local Kaggle notebooks (git-ignored).
+extend-exclude = ["notebooks/kaggle/*.ipynb", "archive"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "NPY"]

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something crashes or does not work as documented (code, app, notebooks, release).
+description: Something crashes or does not work as documented (code, app, release).
 labels: ["bug"]
 body:
   - type: markdown
@@ -16,7 +16,6 @@ body:
         - Demo app (Dash / Docker)
         - Published model (Hub files, modeling.py, example.py)
         - Training or data pipeline (src/)
-        - Kaggle notebook
         - Release packaging
         - Tests, CI or tooling
     validations:

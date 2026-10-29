@@ -109,7 +109,7 @@ uv run pre-commit install                        # run the same checks before ev
 
 CI ([`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) runs `pre-commit run --all-files`
 on every pull request and push to `main`: YAML/TOML checks, a large-file guard, ruff, ruff
-format and pytest. The Kaggle notebooks are executed end to end only with `RUN_NOTEBOOKS=1`.
+format and pytest.
 
 Every hyperparameter lives in [`configs/`](configs/). A config can inherit from another with
 `base: <file>.yaml`; `src.config.load_config` returns the resolved dict. Data, checkpoints and
@@ -118,13 +118,12 @@ published models are tracked in [`results/`](results/).
 
 ## Reproduce
 
-Full training runs on Kaggle GPUs, with self-contained notebooks in
-[`notebooks/kaggle/`](notebooks/kaggle/) that checkpoint and resume. They do not import this
-repo's code. Tests check that the notebooks' classes match `src/`. Bring a notebook's outputs
-back with `uv run python notebooks/kaggle/fetch_outputs.py <notebook>`. Smoke configs
-(`configs/*_tiny.yaml`) run each stage on CPU in under two minutes.
+The code for every stage is in `src/` and runs the same on CPU or GPU. Full training
+ran on Kaggle GPUs (T4); bring a Kaggle run's outputs back with
+`uv run python notebooks/kaggle/fetch_outputs.py <run>`. Smoke configs (`configs/*_tiny.yaml`)
+run each stage on CPU in under two minutes.
 
-**Model 2 – Cleanup** (notebook `model2_cleanup.ipynb`, one session):
+**Model 2 – Cleanup:**
 
 ```bash
 uv run python -m src.data.download --config configs/data.yaml                  # WikiText-103 + DialogSum
@@ -140,11 +139,10 @@ uv run python -m src.eval.aggregate --exp model2_cleanup                       #
 `checkpoints/mlm/encoder.keras`, an earlier Kaggle output: an encoder pretrained by masked-language
 modelling on WikiText-103 and DialogSum. Its run manifest is
 [`results/kaggle/manifest_model1_scorer.json`](results/kaggle/manifest_model1_scorer.json).
-1. `model1_teachers.ipynb`: teacher and baseline outputs (Qwen3-0.6B, fine-tuned RoBERTa-Large
-   and DistilBERT), cached as Parquet. Only needed for the distillation run E4 and the baseline
-   rows.
-2. `model1_notes.ipynb`: the students E1 (gold only, released) and E4 (gold + teachers),
-   3 seeds each.
+Teacher and baseline outputs (Qwen3-0.6B, fine-tuned RoBERTa-Large and DistilBERT; code in
+`src/model1_notes/teacher/` and `src/model1_notes/encoder_teachers.py`) were computed on Kaggle
+and cached as Parquet in `data/labels/model1_v3/`. They are only needed for the distillation
+run E4 and the baseline rows; the released run E1 uses the gold labels alone.
 
 ```bash
 uv run python -m src.model1_notes.data --config configs/model1_v3.yaml                    # arrays
@@ -171,7 +169,7 @@ and seed), `results.md`, and the hand-written model card, `modeling.py` and `exa
 app/                 Dash demo (loads the released models)
 configs/             one YAML per run; *_tiny.yaml = CPU smoke runs
 docs/figures/        architecture figures used in this README (SVG)
-notebooks/kaggle/    self-contained Kaggle notebooks + fetch_outputs.py
+notebooks/kaggle/    fetch_outputs.py: brings Kaggle run outputs back into the repo
 src/data/            dataset download and splits (WikiText-103, DialogSum)
 src/tokenizer/       WordPiece tokenizer
 src/layers/          shared Keras layers (pre-LN transformer, embeddings)

@@ -11,13 +11,13 @@ week). The skill turns a pipeline stage into a **self-contained Kaggle notebook*
 it, set the accelerator and Internet, and click Run All. If the session is cut off, the
 notebook resumes where it stopped.
 
-The notebooks in [`notebooks/kaggle/`](../../../notebooks/kaggle/):
+The notebooks behind the published models (kept locally in the git-ignored `archive/`):
 
 | Notebook | What it runs |
 |---|---|
 | `model2_cleanup.ipynb` | Model 2: data, tokenizer, training (3 seeds), evaluation |
-| `model1_teachers.ipynb` | Model 1 v3 teachers: Qwen3-0.6B labels (own vLLM environment), fine-tuned RoBERTa-Large and DistilBERT |
-| `model1_notes.ipynb` | Model 1 v3 students: E1 (gold only, released) and E4 (with teachers), 3 seeds each |
+| `model1_teachers.ipynb` | Model 1 teachers: Qwen3-0.6B labels (own vLLM environment), fine-tuned RoBERTa-Large and DistilBERT |
+| `model1_notes.ipynb` | Model 1 students: E1 (gold only, released) and E4 (with teachers), 3 seeds each |
 
 ## When it runs
 
@@ -37,9 +37,8 @@ When you ask Claude to "run", "prepare" or "package" a stage for Kaggle, or type
 3. **Keeps teachers isolated**: language-model teachers run in their own virtual environment
    (vLLM), as a subprocess, before JAX starts. The training code never imports PyTorch or
    vLLM.
-4. **Tests it locally** before upload: `RUN_NOTEBOOKS=1 uv run pytest tests/test_notebooks.py`
-   runs each notebook in smoke mode on CPU, with two simulated devices to mimic Kaggle's
-   T4 x2, and loads its outputs with `src/`.
+4. **Tests it locally** before upload: it runs the notebook in smoke mode on CPU, with two
+   simulated devices to mimic Kaggle's T4 x2, and loads its outputs with `src/`.
 5. **Tells you** what to attach (nothing, or the previous output to resume), which
    accelerator to pick, and the expected GPU time.
 
@@ -48,9 +47,10 @@ checkpoints and results back into the repo.
 
 ## Guardrails
 
-- Notebooks are committed without outputs.
-- When `src/` changes, the notebook copy must be updated by hand; the notebook tests catch
-  layer mismatches.
+- Notebooks are local working files: they are git-ignored and never pushed. `src/` is the only
+  training code in the repository; the notebooks used for the published models are kept in the
+  git-ignored `archive/`.
+- When `src/` changes, the notebook copy must be updated by hand.
 - It checks inputs and downloads first and fails fast, so no GPU time is wasted on a missing
   attachment.
 
